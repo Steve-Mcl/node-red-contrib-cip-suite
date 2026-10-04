@@ -153,7 +153,7 @@ re-established, so a polled array costs one request per poll:
 | RPI (ms) | 100 | Requested Packet Interval (cyclic rate) |
 | Input/Output Assembly | 100 / 150 | Assembly instance numbers (see device EDS) |
 | Config Assembly | 0 | Optional config assembly instance |
-| Input/Output Size | 32 | Application data size in bytes (excl. Run/Idle header) |
+| Input/Output Size | 32 | Assembly data size in bytes. Do not count the Run/Idle header or the 16-bit sequence count — the node adds both to the negotiated connection size |
 | UDP Port | 2222 | Local UDP port for implicit I/O |
 | 32-bit Run/Idle header | on | Prepend the Run/Idle header on O→T. Required by the ODVA AC/DC drive profile — leave **on** for PowerFlex drives, or they stay idle and ignore the output assembly |
 | Electronic keying | off | Add an Electronic Key segment to the connection path. **Off = no key** ("don't check identity"), the most compatible choice. Enable only if a strict target rejects an unkeyed connection, then fill in Vendor ID / Device Type / Product Code / Major+Minor revision (from the device EDS). The compatibility bit accepts compatible revisions instead of an exact match |
@@ -178,7 +178,7 @@ parameter the target objected to. The common ones:
 | `0x0110` | Target application not configured for this connection | Wrong assembly instance, or the device needs configuring first |
 | `0x0111` | RPI not supported | Requested RPI outside the device's range |
 | `0x0114`–`0x0116` | Electronic key mismatch | Vendor / device type / revision in the key does not match |
-| `0x0127` / `0x0128` | Invalid O→T / T→O connection size | Input or Output Size wrong — check whether the Run/Idle header's 4 bytes are counted |
+| `0x0127` / `0x0128` | Invalid O→T / T→O connection size | Input or Output Size wrong — enter the assembly size from the EDS only; the node adds the sequence count (2 bytes) and the Run/Idle header (4 bytes, O→T) itself |
 | `0x012a` / `0x012b` | Invalid O→T / T→O application path | Wrong Output or Input assembly instance |
 
 ## Drive Control (PowerFlex 525)

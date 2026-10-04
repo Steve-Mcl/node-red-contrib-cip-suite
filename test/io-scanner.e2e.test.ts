@@ -96,6 +96,27 @@ test("a refused ForwardOpen is reported with its extended status", async () => {
   expect(message).toMatch(/extended 0x0[0-9a-f]{3}/);
 }, 20000);
 
+test("a wrong Input Size is refused as an invalid T→O connection size", async () => {
+  const scanner = makeScanner({
+    targetAddress: "127.0.0.1", targetPort: String(TCP_PORT), rpi: "50",
+    inputAssembly: "1", outputAssembly: "2", configAssembly: "6",
+    inputSize: "4", outputSize: "4", udpPort: "2225", runIdleHeader: true,
+  });
+
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error("no error reported")), 8000);
+  });
+  try {
+    await Promise.race([scanner.nextEvent, deadline]);
+  } finally {
+    clearTimeout(timer!);
+  }
+  await scanner.close();
+
+  expect(scanner.errors.join(" | ")).toContain("extended 0x0128");
+}, 20000);
+
 test("scanner establishes I/O and exchanges cyclic data with the PF525 sim", async () => {
   const RED: any = { nodes: { createNode() {}, registerType(_n: string, ctor: any) { RED._ctor = ctor; } } };
   // eslint-disable-next-line @typescript-eslint/no-var-requires

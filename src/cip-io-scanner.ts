@@ -15,6 +15,7 @@ import { STATUS } from "./utils";
 const ENCAP_HEADER_LEN = 24;
 const EIP_PORT = 44818;
 const IO_UDP_PORT_DEFAULT = 2222; // EtherNet/IP implicit messaging port
+const SEQ_COUNT_SIZE = 2; // 16-bit sequence count that leads every Class 1 data item
 
 module.exports = function (RED: any) {
   function CipIOScannerNode(this: any, config: CipIOScannerConfig) {
@@ -127,9 +128,13 @@ module.exports = function (RED: any) {
       foData.writeUInt32LE(rpiMicroseconds, off); off += 4;
 
       // O→T Network Connection Parameters (16-bit)
-      // Point-to-point, Class 1, Fixed size. When the 32-bit Run/Idle header
-      // is used, the negotiated connection size must include those 4 bytes.
-      const otSize = node._outputSize + (node._runIdleHeader ? 4 : 0);
+      // Point-to-point, Class 1, Fixed size. The connection size is everything
+      // carried in the Connected Data item, not just the assembly: a Class 1
+      // transport always prefixes the 16-bit sequence count, and the 32-bit
+      // Run/Idle header follows it when used. Leaving the sequence count out
+      // negotiates 2 bytes fewer than buildUDPOutputPacket() sends, which strict
+      // drive firmware refuses with extended status 0x0127 / 0x0128.
+      const otSize = SEQ_COUNT_SIZE + (node._runIdleHeader ? 4 : 0) + node._outputSize;
       const otConnParams = (otSize & 0x01FF) | 0x4000; // Fixed, Class 1
       foData.writeUInt16LE(otConnParams, off); off += 2;
 
@@ -137,7 +142,8 @@ module.exports = function (RED: any) {
       foData.writeUInt32LE(rpiMicroseconds, off); off += 4;
 
       // T→O Network Connection Parameters
-      const toConnParams = (node._inputSize & 0x01FF) | 0x4000; // Fixed, Class 1
+      const toSize = SEQ_COUNT_SIZE + node._inputSize;
+      const toConnParams = (toSize & 0x01FF) | 0x4000; // Fixed, Class 1
       foData.writeUInt16LE(toConnParams, off); off += 2;
 
       // Transport Type/Trigger: Direction=Server (bit 7), Cyclic trigger, Class 1.
@@ -177,8 +183,17 @@ module.exports = function (RED: any) {
       // segments (0x24). Logix targets tolerate 0x24, but stricter drive firmware
       // (PowerFlex 525) rejects it — a verified working PLC→PF525 ForwardOpen uses
       // Connection Point segments here.
-      pathSegments.push(Buffer.from([0x20, 0x04, 0x2C, node._outputAssembly & 0xFF]));
-      pathSegments.push(Buffer.from([0x20, 0x04, 0x2C, node._inputAssembly & 0xFF]));
+      //
+      // The Assembly class (0x20 0x04) is stated once and inherited by the
+      // segments after it, which is how Studio 5000 frames the path:
+      //   20 04 24 <cfg> 2C <out> 2C <in>
+      // Repeating the class before each connection point is valid EPATH too, but
+      // a drive matches the path literally against the one in its EDS file.
+      if (node._configAssembly <= 0) {
+        pathSegments.push(Buffer.from([0x20, 0x04]));
+      }
+      pathSegments.push(Buffer.from([0x2C, node._outputAssembly & 0xFF]));
+      pathSegments.push(Buffer.from([0x2C, node._inputAssembly & 0xFF]));
 
       const connPath = Buffer.concat(pathSegments);
 
@@ -263,7 +278,7 @@ module.exports = function (RED: any) {
       // Item 1: Sequenced Address (type=0x8002) = connID(4) + seqNum(4)
       // Item 2: Connected Data (type=0x00B1) = seqCount(2) [+ Run/Idle hdr(4)] + data
       const headerLen = node._runIdleHeader ? 4 : 0;
-      const connDataLen = 2 + headerLen + node._outputSize;
+      const connDataLen = SEQ_COUNT_SIZE + headerLen + node._outputSize;
       const totalLen = 2 + (2+2+8) + (2+2+connDataLen);
       const buf = Buffer.alloc(totalLen);
       let off = 0;

@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **cip-io-scanner** — **the Forward_Open negotiated connection sizes 2 bytes too small.**
+  A Class 1 connection size covers the whole Connected Data item: the 16-bit sequence
+  count, the 32-bit Run/Idle header on O→T when used, then the assembly data. The node
+  left the sequence count out of both directions while still sending it in every cyclic
+  packet, so Output 4 / Input 8 was negotiated as 8 / 8 instead of 10 / 10. Strict
+  targets refuse that with extended status `0x0127` / `0x0128`. (#3)
+
+  **If you had added 2 to Input Size or Output Size to work around this, take it off
+  again.** Both fields are the assembly size from the EDS and nothing else.
+- **cip-io-scanner** — the connection path now states the Assembly class once
+  (`20 04 24 <cfg> 2C <out> 2C <in>`), the way Studio 5000 frames it, instead of
+  repeating `20 04` before each connection point. Both are valid EPATH, but a drive
+  matches the path against the one in its EDS. (#3)
+
+### Changed
+
+- **simulator** — the PowerFlex 525 profile now checks the Forward_Open connection
+  sizes and refuses a mismatch with `0x0127` / `0x0128`, and decodes a connection path
+  whose class is stated once.
+
 ## 0.1.0 — 2026-09-04
 
 Thanks to [@Steve-Mcl](https://github.com/Steve-Mcl) (Node-RED core maintainer), whose

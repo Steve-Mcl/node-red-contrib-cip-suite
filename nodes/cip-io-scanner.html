@@ -126,7 +126,8 @@
     <dt>Input/Output Assembly <span class="property-type">number</span></dt>
     <dd>Assembly instance numbers. Check your device EDS file or documentation.</dd>
     <dt>Input/Output Size <span class="property-type">number</span></dt>
-    <dd>Data sizes in bytes (application data only — do <b>not</b> count the Run/Idle header here).</dd>
+    <dd>Assembly data sizes in bytes (application data only — do <b>not</b> count the Run/Idle header
+    or the 16-bit sequence count here; the node adds both to the negotiated connection size).</dd>
     <dt>32-bit Run/Idle header <span class="property-type">boolean</span></dt>
     <dd>Prepends the 4-byte Run/Idle header to the O&rarr;T (output) data, as required
     by the ODVA AC/DC drive profile and most exclusive-owner I/O. <b>Leave enabled for
@@ -187,7 +188,7 @@ extended 0x012a (Invalid Originator&rarr;Target application path)</pre>
     <li><code>0x0110</code> &mdash; target not configured for this connection: wrong assembly instance, or the device needs configuring first.</li>
     <li><code>0x0111</code> &mdash; RPI outside the range the device supports.</li>
     <li><code>0x0114</code>&ndash;<code>0x0116</code> &mdash; electronic key mismatch (vendor, device type, revision).</li>
-    <li><code>0x0127</code> / <code>0x0128</code> &mdash; invalid O&rarr;T / T&rarr;O connection size. Check whether the Run/Idle header&rsquo;s 4 bytes belong in the count.</li>
+    <li><code>0x0127</code> / <code>0x0128</code> &mdash; invalid O&rarr;T / T&rarr;O connection size. Enter the assembly size from the EDS only; the node adds the sequence count (2 bytes) and the Run/Idle header (4 bytes, O&rarr;T) itself.</li>
     <li><code>0x012a</code> / <code>0x012b</code> &mdash; invalid O&rarr;T / T&rarr;O application path: wrong Output or Input assembly instance.</li>
   </ul>
 </script>
