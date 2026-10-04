@@ -117,6 +117,7 @@ const profiles = {
       configInstance: 6,
       outputInstance: 2,   // O→T (Logic Command + Speed Reference), produced by scanner
       inputInstance: 1,    // T→O (Logic Status + Speed Feedback), produced by drive
+      outputSize: 4,       // bytes the drive consumes on O→T (assembly data only)
       inputSize: 8,        // bytes the drive produces on T→O
     },
     tagSet: "powerflex525",

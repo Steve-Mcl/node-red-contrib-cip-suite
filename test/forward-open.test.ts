@@ -6,10 +6,10 @@
 const { validateDriveForwardOpen, parseForwardOpen, EXT } = require("../simulator/forward-open");
 import { connectionErrorText } from "../src/types";
 
-const IO = { configInstance: 6, outputInstance: 2, inputInstance: 1, inputSize: 8 };
+const IO = { configInstance: 6, outputInstance: 2, inputInstance: 1, outputSize: 4, inputSize: 8 };
 
 /** Build a Forward_Open service-data buffer with the given transport + path. */
-function buildForwardOpen(transport: number, path: Buffer): Buffer {
+function buildForwardOpen(transport: number, path: Buffer, otSize = 10, toSize = 10): Buffer {
   const fixed = Buffer.alloc(36);
   fixed.writeUInt8(0x0a, 0);              // priority/tick
   fixed.writeUInt8(0xf0, 1);             // timeout ticks
@@ -20,9 +20,9 @@ function buildForwardOpen(transport: number, path: Buffer): Buffer {
   fixed.writeUInt32LE(0x12345678, 14);   // orig serial
   fixed.writeUInt8(0x03, 18);            // timeout mult
   fixed.writeUInt32LE(100000, 22);       // O→T RPI
-  fixed.writeUInt16LE(0x4008, 26);       // O→T params (size 8, fixed, class 1)
+  fixed.writeUInt16LE(0x4000 | otSize, 26); // O→T params (fixed, class 1): seq 2 + Run/Idle 4 + data 4
   fixed.writeUInt32LE(100000, 28);       // T→O RPI
-  fixed.writeUInt16LE(0x4008, 32);       // T→O params
+  fixed.writeUInt16LE(0x4000 | toSize, 32); // T→O params: seq 2 + data 8
   fixed.writeUInt8(transport, 34);       // transport type/trigger
   fixed.writeUInt8(path.length / 2, 35); // path size in words
   return Buffer.concat([fixed, path]);
@@ -62,6 +62,33 @@ describe("strict drive Forward_Open validation (PowerFlex 525)", () => {
     const r = validateDriveForwardOpen(fo, IO);
     expect(r.ok).toBe(false);
     expect(r.extended).toBe(EXT.NOT_CONFIGURED);
+  });
+
+  test("accepts the class stated once, as Studio 5000 frames the path", () => {
+    const path = Buffer.from([0x20, 0x04, 0x24, 6, 0x2c, 2, 0x2c, 1]);
+    const r = validateDriveForwardOpen(buildForwardOpen(0x81, path), IO);
+    expect(r.ok).toBe(true);
+    expect(r.parsed.segments).toEqual([
+      { type: "app", classId: 0x04, kind: "instance", value: 6 },
+      { type: "app", classId: 0x04, kind: "connpoint", value: 2 },
+      { type: "app", classId: 0x04, kind: "connpoint", value: 1 },
+    ]);
+  });
+
+  test("rejects an O→T size that omits the sequence count with 0x01 / ext 0x0127", () => {
+    // Run/Idle header 4 + data 4, the size cip-io-scanner used to negotiate.
+    const fo = buildForwardOpen(0x81, Buffer.concat([CONFIG, OUT_CP, IN_CP]), 8, 10);
+    const r = validateDriveForwardOpen(fo, IO);
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0x01);
+    expect(r.extended).toBe(EXT.INVALID_OT_SIZE);
+  });
+
+  test("rejects a T→O size that omits the sequence count with 0x01 / ext 0x0128", () => {
+    const fo = buildForwardOpen(0x81, Buffer.concat([CONFIG, OUT_CP, IN_CP]), 10, 8);
+    const r = validateDriveForwardOpen(fo, IO);
+    expect(r.ok).toBe(false);
+    expect(r.extended).toBe(EXT.INVALID_TO_SIZE);
   });
 
   test("parses an optional electronic key segment", () => {

@@ -20,6 +20,9 @@ const EXT = {
   INVALID_TO_APP_PATH: 0x012b,     // Invalid Target→Originator application path
 };
 
+const SEQ_COUNT_SIZE = 2;       // 16-bit sequence count on every Class 1 data item
+const RUN_IDLE_HEADER_SIZE = 4; // 32-bit real-time header on O→T
+
 /**
  * Parse the Forward_Open service data (everything after CIP service + path).
  * @param {Buffer} data
@@ -49,6 +52,7 @@ function parseForwardOpen(data) {
 
   // Decode connection path into ordered segments.
   const segments = [];
+  let classId = null;
   let i = 0;
   while (i < path.length) {
     const b = path[i];
@@ -66,27 +70,37 @@ function parseForwardOpen(data) {
       });
       i += 10;
     } else if (b === 0x20) {
-      // 8-bit logical Class segment, immediately followed by an 8-bit logical
-      // Instance (0x24) or Connection Point (0x2c) segment.
-      const classId = path[i + 1];
-      const subType = path[i + 2];
-      const value = path[i + 3];
-      const kind = subType === 0x24 ? "instance" : subType === 0x2c ? "connpoint" : "0x" + subType.toString(16);
-      segments.push({ type: "app", classId, kind, value });
-      i += 4;
+      // 8-bit logical Class segment. It applies to the Instance / Connection
+      // Point segments that follow until another class is stated, so both
+      // "20 04 24 06 2C 02 2C 01" (Studio 5000) and the form that repeats the
+      // class before every segment decode to the same three application paths.
+      classId = path[i + 1];
+      i += 2;
+    } else if ((b === 0x24 || b === 0x2c) && classId !== null) {
+      // 8-bit logical Instance (0x24) or Connection Point (0x2c) segment.
+      const kind = b === 0x24 ? "instance" : "connpoint";
+      segments.push({ type: "app", classId, kind, value: path[i + 1] });
+      i += 2;
     } else {
       segments.push({ type: "unknown", byte: b });
       i += 1;
     }
   }
 
-  return { ...fixed, path, segments };
+  return {
+    ...fixed,
+    otSize: fixed.otParams & 0x01ff,
+    toSize: fixed.toParams & 0x01ff,
+    path,
+    segments,
+  };
 }
 
 /**
  * Validate a parsed Forward_Open the way a strict AC drive (PF525) does.
  * @param {Buffer} data - Forward_Open service data
  * @param {object} ioConfig - expected assemblies { configInstance, outputInstance, inputInstance }
+ *   and, to check the connection sizes, their data sizes { outputSize, inputSize }
  * @returns {{ok:true, parsed:object} | {ok:false, status:number, extended:number, reason:string, parsed?:object}}
  */
 function validateDriveForwardOpen(data, ioConfig) {
@@ -143,6 +157,30 @@ function validateDriveForwardOpen(data, ioConfig) {
       reason: `assembly instances cfg=${cfg.value}/out=${out.value}/in=${inp.value} do not match ` +
         `drive (cfg=${ioConfig.configInstance}/out=${ioConfig.outputInstance}/in=${ioConfig.inputInstance})`,
     };
+  }
+
+  // 4) Connection sizes. A Class 1 connection size counts the whole Connected
+  //    Data item: the 16-bit sequence count, then on O→T the 32-bit Run/Idle
+  //    header an AC drive requires, then the assembly data.
+  if (ioConfig.outputSize !== undefined) {
+    const expected = SEQ_COUNT_SIZE + RUN_IDLE_HEADER_SIZE + ioConfig.outputSize;
+    if (parsed.otSize !== expected) {
+      return {
+        ok: false, status: 0x01, extended: EXT.INVALID_OT_SIZE, parsed,
+        reason: `O→T connection size ${parsed.otSize} invalid (expected ${expected}: ` +
+          `sequence count 2 + Run/Idle header 4 + assembly ${ioConfig.outputSize})`,
+      };
+    }
+  }
+  if (ioConfig.inputSize !== undefined) {
+    const expected = SEQ_COUNT_SIZE + ioConfig.inputSize;
+    if (parsed.toSize !== expected) {
+      return {
+        ok: false, status: 0x01, extended: EXT.INVALID_TO_SIZE, parsed,
+        reason: `T→O connection size ${parsed.toSize} invalid (expected ${expected}: ` +
+          `sequence count 2 + assembly ${ioConfig.inputSize})`,
+      };
+    }
   }
 
   return { ok: true, parsed };
