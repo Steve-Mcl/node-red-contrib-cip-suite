@@ -35,6 +35,18 @@ import {
   applyInitialStatus
 } from "./endpoint-dynamic";
 
+/**
+ * The tag types each Data Type option accepts. Logix holds STRING as a structure, so the
+ * STRING option takes STRUCT as well as the atomic string types.
+ */
+const DATA_TYPE_MATCHES: Record<string, string[]> = {
+  BOOL: ["BOOL"],
+  INT: ["INT"],
+  DINT: ["DINT"],
+  REAL: ["REAL"],
+  STRING: ["STRING", "SHORT_STRING", "STRING2", "STRINGN", "STRINGI", "STRUCT"],
+};
+
 module.exports = function (RED: any) {
   function CipWriteNode(this: any, config: any) {
     RED.nodes.createNode(this, config);
@@ -47,6 +59,20 @@ module.exports = function (RED: any) {
     node.useStaticValue = config.useStaticValue || false;
     node.useAtomicBitWrite = config.useAtomicBitWrite || false;
     node._writing = false;
+
+    /**
+     * Every write reads the tag first, so the controller's own type is what goes out.
+     * A Data Type other than Auto only checks that type, so a node meant for a REAL
+     * fails clearly instead of writing a tag it was not set up for.
+     */
+    function checkDataType(tag: any, tagName: string): void {
+      const accepted = DATA_TYPE_MATCHES[node.dataType];
+      if (!accepted) return;
+      const actual = typeof tag.type === "number" ? cipTypeName(tag.type) : String(tag.type);
+      if (!accepted.includes(actual)) {
+        throw new Error(`${tagName} is ${actual}, but the node's Data Type is ${node.dataType}`);
+      }
+    }
 
     if (!node.endpoint) {
       node.status({ fill: "red", shape: "ring", text: "no endpoint" });
@@ -187,6 +213,7 @@ module.exports = function (RED: any) {
           const idx = parsed.arrayStart + i;
           const elemTag = new Tag(`${parsed.baseName}[${idx}]`);
           await controller.readTag(elemTag); // init type
+          checkDataType(elemTag, elemTag.name);
           elemTag.value = value[i];
           await controller.writeTag(elemTag);
         }
@@ -202,6 +229,7 @@ module.exports = function (RED: any) {
       if (parsed.arrayIndex !== null) {
         const tag = new Tag(`${parsed.baseName}[${parsed.arrayIndex}]`);
         await controller.readTag(tag); // init type
+        checkDataType(tag, tagName);
         tag.value = value;
         await controller.writeTag(tag);
         return {
@@ -247,13 +275,8 @@ module.exports = function (RED: any) {
       }
 
       // Standard tag write
+      checkDataType(tag, tagName);
       tag.value = value;
-      if (node.dataType !== "auto") {
-        const explicitType = parseInt(node.dataType, 16);
-        if (!isNaN(explicitType)) {
-          tag.type = explicitType;
-        }
-      }
       await controller.writeTag(tag);
 
       return {
