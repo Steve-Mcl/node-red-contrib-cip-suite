@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.2.0 — 2026-10-13
+
+Thanks to [@Steve-Mcl](https://github.com/Steve-Mcl) for the detailed reports behind most
+of this release (#17–#21).
+
+Tested with unit tests and end-to-end against the bundled simulator. **Not yet tested on
+real hardware**, in particular cip-raw/cip-param on a Micro800 and UDT writes on Logix.
+
+### Breaking
+
+- **cip-controller** — **`run`, `program`, `test` and `reset` are refused.** The mode
+  commands wrote the Identity object's Status word, which is get-only, so they never
+  changed the mode. `reset` sent the Identity *Reset* service, which restarts the device
+  rather than clearing a fault. Logix has no documented CIP request for either, so both
+  now fail with a clear error and send nothing. Use the keyswitch or Studio 5000. (#20)
+- **cip-write** — **Data Type is a check, not an override.** The option was parsed as
+  hex: BOOL and DINT became invalid type codes and every such write failed; INT, REAL
+  and STRING were silently ignored. The node reads each tag before writing it, so the
+  controller's own type is what goes out; a chosen Data Type now fails the write when
+  the tag has a different type. (#19)
+
+### Fixed
+
+- **cip-raw, cip-param, cip-energy, cip-motion, cip-sync, cip-file, cip-security** —
+  **never received a reply.** They read the reply from `write_cip`'s callback, which is
+  only the socket write callback. The endpoint has a new `request()` that waits for the
+  matching reply. (#28)
+- **cip-endpoint** — **Micro800 mode: a failed read inside a batch crashed Node-RED.**
+  st-ethernet-ip threw from its socket handler on a Multiple Service Packet reply with
+  outer status 0 and a failed entry; the endpoint now guards those handlers and fails
+  the batch read with `0x1E`. (#17)
+- **All nodes** — **CIP errors showed as `undefined`** in `msg.payload.error` and
+  `node.error`. They now read e.g. `Attribute not settable (CIP 0x0e)`, failed results
+  carry `generalStatusCode` and `extendedStatus`, and Catch nodes get a real `Error`. (#21)
+- **CIP status texts** from `0x17` on were shifted by two (`0x1E` read "Missing
+  attribute list entry data"); they now follow CIP Vol. 1 Appendix B.
+- **cip-write** — **UDT writes were never taken.** An object payload to a UDT tag or
+  UDT array element now changes only the members it names; nested UDTs merge the same
+  way and an unknown member fails the write.
+- **cip-param** — a read reported `success: true` with no value when every request
+  failed, and the descriptor bits (read only, scaling, monitoring) were misread.
+- **cip-controller** — `getProps` and `getStatus`, documented in the help, ended as
+  "Unknown command"; they now read the controller. The help describes the actual payload.
+- **cip-endpoint** — the Port field implied another port was used. st-ethernet-ip
+  always connects on 44818 (SerafinTech/ST-node-ethernet-ip#85), so logs, status and the
+  editor now show 44818 and a different configured port gets a warning. (#18, still open)
+
+### Changed
+
+- **simulator** — answers a failed Multiple Service Packet entry with `0x1E`, writes
+  UDTs (plain and fragmented), and uses the CIP Parameter Object's attribute numbers.
+- **tests** — Jest runs suites one at a time, since several e2e suites need the
+  simulator on 44818.
+
 ## 0.1.1 — 2026-10-04
 
 ### Fixed
