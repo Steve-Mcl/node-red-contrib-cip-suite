@@ -11,7 +11,7 @@
  * @module cip-param
  */
 
-import { STATUS, withTiming, cipStatusText } from "./utils";
+import { STATUS, withTiming, cipStatusText, toCipError } from "./utils";
 
 const PARAMETER_CLASS = 0x0f;
 
@@ -38,11 +38,13 @@ const PARAM_ATTR = {
 
 // Parameter descriptor bit field
 const PARAM_DESC_FLAGS = {
-  SUPPORTS_SCALING: 0x01,
-  READ_ONLY: 0x02,
-  ALL_INSTANCES_SAME: 0x04,
-  SUPPORTS_FULL_PRECISION: 0x08,
-  MONITORING_VALUE: 0x10,
+  SUPPORTS_SETTABLE_PATH: 0x01,
+  SUPPORTS_ENUMERATED_STRINGS: 0x02,
+  SUPPORTS_SCALING: 0x04,
+  SUPPORTS_SCALING_LINKS: 0x08,
+  READ_ONLY: 0x10,
+  MONITORING_VALUE: 0x20,
+  SUPPORTS_EXTENDED_PRECISION: 0x40,
 };
 
 // CIP data type code → size mapping
@@ -125,13 +127,7 @@ module.exports = function (RED: any) {
     }
 
     async function sendReq(req: Buffer): Promise<{ status: number; data: Buffer }> {
-      const controller = node.endpoint.getController();
-      if (!controller) throw new Error("Controller not available");
-      const raw: Buffer = await new Promise((resolve, reject) => {
-        controller.write_cip(req, false, 10, (err: any, data: Buffer) => {
-          if (err) reject(err); else resolve(data);
-        });
-      });
+      const raw: Buffer = await node.endpoint.request(req);
       if (!raw || raw.length < 4) throw new Error("Empty response");
       const status = raw.readUInt8(2);
       const extSize = raw.readUInt8(3);
@@ -210,13 +206,20 @@ module.exports = function (RED: any) {
         }
       } catch (_) {}
 
-      // Read individual attributes for reliable parsing
-      // Value
-      try {
+      // Read individual attributes for reliable parsing.
+      // The value is the point of the read, so unlike the descriptive attributes below,
+      // failing to get it fails the read rather than reporting success with no value.
+      {
         const p = buildPath(PARAMETER_CLASS, instance, PARAM_ATTR.VALUE);
         const { status, data } = await sendReq(buildReq(0x0e, p));
-        if (status === 0) param.valueRaw = data;
-      } catch (_) {}
+        if (status !== 0) {
+          throw toCipError(
+            { generalStatusCode: status, extendedStatus: [] },
+            `Parameter ${instance} value read failed`
+          );
+        }
+        param.valueRaw = data;
+      }
 
       // Data Type
       try {

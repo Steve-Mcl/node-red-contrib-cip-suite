@@ -777,6 +777,70 @@ module.exports = function (RED: any) {
     };
 
     /**
+     * Send a raw CIP request and resolve with the controller's reply: the whole CIP
+     * message, from the reply service code through status and data.
+     *
+     * write_cip's callback cannot be used for this. It is the socket write callback, so
+     * it fires once the bytes are sent and never carries the reply. The reply arrives as
+     * the library's "SendRRData Received" / "SendUnitData Received" events, both watched
+     * here since a Logix controller with an open connection sends connected even when
+     * asked for unconnected. A reply is matched by its service code (or 0xD2, an
+     * Unconnected Send error), so requests run one at a time.
+     */
+    node._requestChain = Promise.resolve();
+    node.request = function (req: Buffer, opts: { connected?: boolean } = {}): Promise<Buffer> {
+      const run = (): Promise<Buffer> => sendRequest(req, Boolean(opts.connected));
+      const result = node._requestChain.then(run, run);
+      node._requestChain = result.catch(() => undefined);
+      return result;
+    };
+
+    function sendRequest(req: Buffer, connected: boolean): Promise<Buffer> {
+      const plc = node.plc;
+      if (!node.connected || !plc) return Promise.reject(new Error("Not connected to PLC"));
+      const expected = req.readUInt8(0) | 0x80;
+      const waitMs = Math.max(1000, node.connTimeout);
+      const started = Date.now();
+
+      return new Promise<Buffer>((resolve, reject) => {
+        const finish = (err: Error | null, reply?: Buffer): void => {
+          clearTimeout(timer);
+          plc.removeListener("SendRRData Received", onRRData);
+          plc.removeListener("SendUnitData Received", onUnitData);
+          if (err) {
+            node.metrics.errorCount++;
+            reject(err);
+          } else {
+            updateResponseTime(Date.now() - started);
+            resolve(reply as Buffer);
+          }
+        };
+        const match = (reply: any): void => {
+          if (!Buffer.isBuffer(reply) || reply.length < 4) return;
+          const service = reply.readUInt8(0);
+          if (service === expected || service === 0xd2) finish(null, reply);
+        };
+        const onRRData = (srrd: any): void => match(srrd?.[1]?.data);
+        // SendUnitData carries a 2-byte connection sequence count ahead of the reply.
+        const onUnitData = (sud: any): void => match(sud?.[1]?.data?.subarray(2));
+        const timer = setTimeout(() => {
+          const hex = "0x" + req.readUInt8(0).toString(16).padStart(2, "0");
+          finish(new Error(`No reply to CIP service ${hex} within ${waitMs}ms`));
+        }, waitMs);
+
+        plc.on("SendRRData Received", onRRData);
+        plc.on("SendUnitData Received", onUnitData);
+        try {
+          plc.write_cip(req, connected, 10, (err: any) => {
+            if (err) finish(toCipError(err, "Request failed"));
+          });
+        } catch (err: any) {
+          finish(toCipError(err, "Request failed"));
+        }
+      });
+    }
+
+    /**
      * Read the PLC wall clock time.
      */
     node.readWallClock = async function (): Promise<Date> {

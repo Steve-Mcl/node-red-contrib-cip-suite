@@ -85,15 +85,7 @@ module.exports = function (RED: any) {
      * Send a CIP request and get parsed response.
      */
     async function sendCIPRequest(req: Buffer): Promise<{ status: number; data: Buffer }> {
-      const controller = node.endpoint.getController();
-      if (!controller) throw new Error("Controller not available");
-
-      const raw: Buffer = await new Promise((resolve, reject) => {
-        controller.write_cip(req, false, 10, (err: any, data: Buffer) => {
-          if (err) reject(err);
-          else resolve(data);
-        });
-      });
+      const raw: Buffer = await node.endpoint.request(req);
 
       if (!raw || raw.length < 4) throw new Error("Empty response");
 

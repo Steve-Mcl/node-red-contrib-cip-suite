@@ -171,7 +171,6 @@ module.exports = function (RED: any) {
       node.status({ fill: "yellow", shape: "dot", text: "requesting..." });
 
       try {
-        const controller = node.endpoint.getController();
         const command = msg.command || msg.topic || "status";
 
         switch (command) {
@@ -179,12 +178,7 @@ module.exports = function (RED: any) {
           case "getAttributes": {
             // Read CIP Security Object attributes
             const req = buildSecurityObjectRequest(0x01, 1); // GetAttributeAll, instance 1
-            const raw: Buffer = await new Promise((resolve, reject) => {
-              controller.write_cip(req, false, 10, (err: any, data: Buffer) => {
-                if (err) reject(err);
-                else resolve(data);
-              });
-            });
+            const raw: Buffer = await node.endpoint.request(req);
 
             // Parse response
             const service = raw.readUInt8(0) & 0x7f;
@@ -275,12 +269,7 @@ module.exports = function (RED: any) {
           case "getProfiles": {
             // Read Security Profile Object
             const req = buildSecurityObjectRequest(0x01, 1);
-            const raw: Buffer = await new Promise((resolve, reject) => {
-              controller.write_cip(req, false, 10, (err: any, data: Buffer) => {
-                if (err) reject(err);
-                else resolve(data);
-              });
-            });
+            const raw: Buffer = await node.endpoint.request(req);
             const status = raw.readUInt8(2);
             const extSize = raw.readUInt8(3);
             const respData = raw.slice(4 + extSize * 2);
