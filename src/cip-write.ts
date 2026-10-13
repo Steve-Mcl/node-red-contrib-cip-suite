@@ -26,6 +26,7 @@ import {
   parseProgramScope,
   isPlainObject,
   mergeMembers,
+  cipErrorFields,
 } from "./utils";
 import {
   DynOpts,
@@ -170,7 +171,7 @@ module.exports = function (RED: any) {
           } catch (err: any) {
             // Fall through to software read-modify-write
             node.warn(
-              `Atomic bit write failed, falling back to software RMW: ${err.message}`
+              `Atomic bit write failed, falling back to software RMW: ${describeCipError(err)}`
             );
           }
         }
@@ -285,7 +286,7 @@ module.exports = function (RED: any) {
             success: false,
             tagName: item.name,
             value: item.value,
-            error: err.message,
+            ...cipErrorFields(err),
             timestamp: Date.now(),
           });
         }
@@ -374,13 +375,10 @@ module.exports = function (RED: any) {
         msg.payload = {
           success: false,
           tagName: msg.tagName || node.tagName,
-          error: err.message,
+          ...cipErrorFields(err),
           timestamp: Date.now(),
         } as WriteResult;
-        node.error(
-          `Write failed for ${msg.tagName || node.tagName}: ${err.message}`,
-          msg
-        );
+        node.error(toCipError(err, `Write failed for ${msg.tagName || node.tagName}`), msg);
         node.send(stampEndpoint(msg, endpoint));
       } finally {
         node._writing = false;

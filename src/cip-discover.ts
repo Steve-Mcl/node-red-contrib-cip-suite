@@ -7,7 +7,7 @@
 
 import * as dgram from "dgram";
 import { CipDiscoverConfig, DiscoveredDevice, NodeStatus } from "./types";
-import { STATUS } from "./utils";
+import { STATUS, describeCipError } from "./utils";
 
 const EIP_PORT = 44818;
 const ENCAP_COMMAND_LIST_IDENTITY = 0x0063;
@@ -192,8 +192,8 @@ module.exports = function (RED: any) {
         socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
         socket.on("error", (err: Error) => {
-          node.error(`Discovery error: ${err.message}`, msg);
-          node.status(STATUS.error(err.message));
+          node.error(`Discovery error: ${describeCipError(err)}`, msg);
+          node.status(STATUS.error(describeCipError(err)));
           cleanup();
         });
 
@@ -219,8 +219,8 @@ module.exports = function (RED: any) {
           const packet = buildListIdentityPacket();
           socket.send(packet, 0, packet.length, EIP_PORT, broadcastAddr, (err) => {
             if (err) {
-              node.error(`Failed to send ListIdentity: ${err.message}`, msg);
-              node.status(STATUS.error(err.message));
+              node.error(`Failed to send ListIdentity: ${describeCipError(err)}`, msg);
+              node.status(STATUS.error(describeCipError(err)));
               cleanup();
               return;
             }
@@ -230,8 +230,8 @@ module.exports = function (RED: any) {
           timeoutHandle = setTimeout(finish, timeout);
         });
       } catch (err: any) {
-        node.error(`Discovery failed: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        node.error(`Discovery failed: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         cleanup();
       }
     });

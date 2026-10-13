@@ -360,6 +360,65 @@ export function toCipError(err: any, prefix?: string): Error {
 }
 
 /**
+ * The error fields of a failed result: readable text plus, for a CIP refusal, the raw
+ * status codes so a flow can branch on them instead of parsing text.
+ */
+export function cipErrorFields(err: any): {
+  error: string;
+  generalStatusCode?: number;
+  extendedStatus?: number[];
+} {
+  const fields: { error: string; generalStatusCode?: number; extendedStatus?: number[] } = {
+    error: describeCipError(err),
+  };
+  if (err && typeof err === "object" && typeof err.generalStatusCode === "number") {
+    fields.generalStatusCode = err.generalStatusCode;
+    fields.extendedStatus = Array.isArray(err.extendedStatus) ? err.extendedStatus : [];
+  }
+  return fields;
+}
+
+/**
+ * The st-ethernet-ip reply handlers that run inside the socket 'data' event. Anything
+ * they throw is uncaught and takes down the whole Node-RED process.
+ */
+export const LIB_REPLY_HANDLERS = ["_handleSendRRDataReceived", "_handleSendUnitDataReceived"];
+
+/**
+ * Wrap the library's reply handlers so a reply it cannot parse is logged instead of
+ * crashing Node-RED (SerafinTech/ST-node-ethernet-ip#84: a Multiple Service Packet reply
+ * with outer status 0 and a failed embedded reply dereferences null).
+ *
+ * Must run before connect(), which is where the library registers these handlers.
+ * When the failed reply was a Multiple Service Packet, its waiter is failed straight away
+ * with 0x1E (embedded service error) rather than left to time out.
+ */
+export function guardReplyHandlers(plc: any, warn: (text: string) => void): void {
+  for (const name of LIB_REPLY_HANDLERS) {
+    const original = plc[name];
+    if (typeof original !== "function") continue;
+    // SendUnitData carries a 2-byte connection sequence count ahead of the CIP reply.
+    const serviceOffset = name === "_handleSendUnitDataReceived" ? 2 : 0;
+    plc[name] = function (this: any, ...args: any[]) {
+      try {
+        return original.apply(this, args);
+      } catch (e: any) {
+        warn(`Ignored a CIP reply the library could not handle: ${describeCipError(e)}`);
+        let service: number | undefined;
+        try {
+          service = args[0][1].data.readUInt8(serviceOffset);
+        } catch {
+          // reply too short to name its service
+        }
+        if (service === 0x8a) {
+          this.emit("Multiple Service Packet", { generalStatusCode: 0x1e, extendedStatus: [] }, []);
+        }
+      }
+    };
+  }
+}
+
+/**
  * Standard Node-RED status objects.
  */
 export const STATUS = {

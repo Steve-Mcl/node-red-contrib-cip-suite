@@ -354,8 +354,8 @@ module.exports = function (RED) {
                     `RPI=${node._rpi}ms`);
             }
             catch (err) {
-                node.error(`I/O connection failed: ${err.message}`);
-                node.status(utils_1.STATUS.error(err.message));
+                node.error(`I/O connection failed: ${(0, utils_1.describeCipError)(err)}`);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                 cleanup();
                 // Retry after 5 seconds
                 if (!node._closing) {
@@ -471,7 +471,7 @@ module.exports = function (RED) {
                 handleUDPInput(msg);
             });
             node._udpSocket.on("error", (err) => {
-                node.error(`UDP error: ${err.message}`);
+                node.error(`UDP error: ${(0, utils_1.describeCipError)(err)}`);
             });
             node._udpSocket.bind(node._udpPort, () => {
                 // Start cyclic output timer

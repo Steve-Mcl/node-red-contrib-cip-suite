@@ -272,7 +272,7 @@ module.exports = function (RED) {
                             tagName: item.name,
                             value: null,
                             type: "",
-                            error: err.message,
+                            ...(0, utils_1.cipErrorFields)(err),
                         });
                     }
                 }

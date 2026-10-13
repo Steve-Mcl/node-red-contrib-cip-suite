@@ -17,7 +17,7 @@ import {
   PCCC_FNC,
 } from "./pccc-utils";
 import { PCCCAddress, PCCCFileType } from "./types";
-import { STATUS, setBit } from "./utils";
+import { STATUS, setBit, describeCipError } from "./utils";
 
 module.exports = function (RED: any) {
   function CipPcccWriteNode(this: any, config: any) {
@@ -50,7 +50,7 @@ module.exports = function (RED: any) {
     });
 
     node.on("pccc:error", (err: Error) => {
-      node.status(STATUS.error(err.message));
+      node.status(STATUS.error(describeCipError(err)));
     });
 
     // ── Write logic ──
@@ -63,9 +63,9 @@ module.exports = function (RED: any) {
       try {
         parsedAddr = parsePCCCAddress(addressStr);
       } catch (err: any) {
-        node.error(`Invalid PCCC address "${addressStr}": ${err.message}`, msg);
+        node.error(`Invalid PCCC address "${addressStr}": ${describeCipError(err)}`, msg);
         node._writing = false;
-        sendResult(msg, addressStr, value, false, err.message);
+        sendResult(msg, addressStr, value, false, describeCipError(err));
         return;
       }
 
@@ -86,9 +86,9 @@ module.exports = function (RED: any) {
         sendResult(msg, parsedAddr.displayAddress, value, true);
         node.status(STATUS.connected());
       } catch (err: any) {
-        node.error(`PCCC write "${addressStr}" failed: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
-        sendResult(msg, parsedAddr.displayAddress, value, false, err.message);
+        node.error(`PCCC write "${addressStr}" failed: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
+        sendResult(msg, parsedAddr.displayAddress, value, false, describeCipError(err));
       } finally {
         node._writing = false;
       }

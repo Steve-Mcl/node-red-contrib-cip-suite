@@ -11,7 +11,14 @@
  */
 
 import { CIPService, CIP_STATUS } from "./types";
-import { cipStatusText, STATUS, withTiming, describeCipError, toCipError } from "./utils";
+import {
+  cipStatusText,
+  STATUS,
+  withTiming,
+  describeCipError,
+  toCipError,
+  cipErrorFields,
+} from "./utils";
 import {
   DynOpts,
   MsgEndpoint,
@@ -408,13 +415,13 @@ module.exports = function (RED: any) {
           success: false,
           service: msg.service || node.service,
           status: 0xff,
-          statusText: err.message,
+          statusText: describeCipError(err),
           data: null,
           raw: null,
-          error: err.message,
+          ...cipErrorFields(err),
           timestamp: Date.now(),
         };
-        node.error(`Raw CIP request failed: ${err.message}`, msg);
+        node.error(toCipError(err, "Raw CIP request failed"), msg);
         node.send(stampEndpoint(msg, endpoint));
       } finally {
         node._busy = false;

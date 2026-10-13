@@ -1408,8 +1408,11 @@ function handleMultipleServicePacket(data) {
     absOffset += replies[i].length;
   }
 
-  console.log(`  MULTIPLE SERVICE PACKET: ${count} requests`);
-  return cipResponse(0x0a, 0, resp);
+  // A real controller flags any failed embedded reply with outer status 0x1E
+  // (embedded service error); the replies themselves are still returned.
+  const anyFailed = replies.some((r) => r.length >= 3 && r.readUInt8(2) !== 0);
+  console.log(`  MULTIPLE SERVICE PACKET: ${count} requests${anyFailed ? " (0x1E)" : ""}`);
+  return cipResponse(0x0a, anyFailed ? 0x1e : 0, resp);
 }
 
 // ─── Main CIP request dispatcher ────────────────────────────────────

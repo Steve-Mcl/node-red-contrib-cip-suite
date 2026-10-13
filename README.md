@@ -38,7 +38,7 @@ All nodes appear under the **CIP Suite** category with a grey CIP icon.
 | **cip-write** | In/Out | Write tag values. Supports bit-level writes (atomic via CIP 0x4E or software RMW), arrays, UDT partial merge, batch writes. |
 | **cip-browse** | In/Out | Discover tags on the PLC. Glob/regex filtering, UDT detection, program-scoped tags. |
 | **cip-subscribe** | Out | Continuous cyclic multi-tag scanning via `readTagGroup()`. Deadband filtering, report-by-exception, runtime reconfiguration. |
-| **cip-controller** | In/Out | Read controller identity, mode, fault status, keyswitch, tag count. Runtime commands: run/program/test/reset. |
+| **cip-controller** | In/Out | Read controller identity, mode, fault status, keyswitch, tag count. Read-only: no mode change or fault reset. |
 | **cip-raw** | In/Out | Send raw CIP service requests. Supports Multiple Service Packet (0x0A). Full response parsing with human-readable status codes. |
 | **cip-discover** | In/Out | UDP broadcast ListIdentity for network device discovery. Standalone — no endpoint required. |
 

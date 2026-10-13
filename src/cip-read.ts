@@ -24,6 +24,7 @@ import {
   cipTypeName,
   describeCipError,
   toCipError,
+  cipErrorFields,
 } from "./utils";
 import { ArraySizeCache, resolveArrayLength } from "./tag-array";
 import {
@@ -342,7 +343,7 @@ module.exports = function (RED: any) {
               tagName: item.name,
               value: null,
               type: "",
-              error: err.message,
+              ...cipErrorFields(err),
             });
           }
         } else {
