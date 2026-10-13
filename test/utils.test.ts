@@ -11,6 +11,7 @@ import {
   parseTagList,
   withTiming,
   debounce,
+  mergeMembers,
 } from "../src/utils";
 
 // ── parseTagName ──
@@ -420,5 +421,34 @@ describe("debounce", () => {
     expect(fn).not.toHaveBeenCalled();
     jest.advanceTimersByTime(50);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("mergeMembers", () => {
+  const udt = { A: 1, Arr: [1, 2, 3], Sub: { X: 1, Y: 2 } };
+
+  it("changes only the members named, case-insensitively", () => {
+    expect(mergeMembers(udt, { a: 9, sub: { y: 7 } })).toEqual({
+      A: 9,
+      Arr: [1, 2, 3],
+      Sub: { X: 1, Y: 7 },
+    });
+  });
+
+  it("replaces array elements by index and keeps the length", () => {
+    expect(mergeMembers(udt, { Arr: [5] }).Arr).toEqual([5, 2, 3]);
+  });
+
+  it("does not modify the value it was given", () => {
+    mergeMembers(udt, { A: 2, Sub: { X: 3 } });
+    expect(udt).toEqual({ A: 1, Arr: [1, 2, 3], Sub: { X: 1, Y: 2 } });
+  });
+
+  it("rejects an unknown member with its full path", () => {
+    expect(() => mergeMembers(udt, { Sub: { Z: 1 } })).toThrow("Sub.Z is not a member of the UDT");
+  });
+
+  it("rejects an array longer than the member", () => {
+    expect(() => mergeMembers(udt, { Arr: [1, 2, 3, 4] })).toThrow("Arr has 3 elements, got 4");
   });
 });

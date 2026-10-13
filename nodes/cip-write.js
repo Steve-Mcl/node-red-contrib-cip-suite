@@ -114,14 +114,7 @@ module.exports = function (RED) {
             const controller = endpoint.getController();
             if (!controller)
                 throw new Error("Controller not available");
-            const { Tag } = require("st-ethernet-ip");
-            let Structure;
-            try {
-                Structure = require("st-ethernet-ip").Structure;
-            }
-            catch {
-                // Structure class may not be available
-            }
+            const { Tag, Structure } = require("st-ethernet-ip");
             // Bit-level write: "MyDint.5"
             if (parsed.bitIndex !== null) {
                 const bitValue = Boolean(value);
@@ -186,13 +179,28 @@ module.exports = function (RED) {
                     timestamp: Date.now(),
                 };
             }
-            // Array element write: "MyArray[3]"
-            if (parsed.arrayIndex !== null) {
-                const tag = new Tag(`${parsed.baseName}[${parsed.arrayIndex}]`);
-                await controller.readTag(tag); // init type
-                checkDataType(tag, tagName);
-                tag.value = value;
-                await controller.writeTag(tag);
+            // Array element ("MyArray[3]") or whole tag. Read it first: that sets the type the
+            // write goes out with, and says whether it is a UDT.
+            const fullName = parsed.arrayIndex !== null ? `${parsed.baseName}[${parsed.arrayIndex}]` : parsed.baseName;
+            const tag = new Tag(fullName);
+            await controller.readTag(tag); // init type
+            checkDataType(tag, tagName);
+            // UDT write. Tag.type is the type name, so a structure reads as "STRUCT".
+            if (tag.type === "STRUCT" && (0, utils_1.isPlainObject)(value)) {
+                const scope = (0, utils_1.parseProgramScope)(fullName);
+                const tagList = controller.state?.tagList;
+                // newTag() returns a Structure when the tag list holds the template, which is what
+                // turns the object into the controller's byte layout.
+                const struct = typeof controller.newTag === "function" && tagList
+                    ? controller.newTag(scope.name, scope.program, false)
+                    : new Structure(scope.name, tagList, scope.program);
+                await controller.readTag(struct);
+                if (!(0, utils_1.isPlainObject)(struct.value)) {
+                    throw new Error(`${tagName} is a UDT, but its template is not in the tag list, so it cannot be written as an object`);
+                }
+                // Members not in msg.payload keep the values just read.
+                struct.value = (0, utils_1.mergeMembers)(struct.value, value);
+                await controller.writeTag(struct);
                 return {
                     success: true,
                     tagName,
@@ -200,39 +208,7 @@ module.exports = function (RED) {
                     timestamp: Date.now(),
                 };
             }
-            // UDT/Structure write
-            const tag = new Tag(parsed.baseName);
-            await controller.readTag(tag); // init type
-            const typeCode = typeof tag.type === "object" && tag.type !== null ? tag.type.code : tag.type;
-            if (typeCode === types_1.CIPDataType.STRUCT &&
-                Structure &&
-                typeof Structure === "function" &&
-                typeof value === "object" &&
-                value !== null) {
-                try {
-                    const struct = new Structure(parsed.baseName);
-                    await controller.readTag(struct);
-                    // Apply new values to the structure
-                    if (typeof struct.value === "object" && struct.value !== null) {
-                        Object.assign(struct.value, value);
-                    }
-                    else {
-                        struct.value = value;
-                    }
-                    await controller.writeTag(struct);
-                    return {
-                        success: true,
-                        tagName,
-                        value,
-                        timestamp: Date.now(),
-                    };
-                }
-                catch {
-                    // Fall through to standard write
-                }
-            }
             // Standard tag write
-            checkDataType(tag, tagName);
             tag.value = value;
             await controller.writeTag(tag);
             return {
