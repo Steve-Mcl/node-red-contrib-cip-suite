@@ -323,13 +323,13 @@ module.exports = function (RED) {
                     success: false,
                     service: msg.service || node.service,
                     status: 0xff,
-                    statusText: err.message,
+                    statusText: (0, utils_1.describeCipError)(err),
                     data: null,
                     raw: null,
-                    error: err.message,
+                    ...(0, utils_1.cipErrorFields)(err),
                     timestamp: Date.now(),
                 };
-                node.error(`Raw CIP request failed: ${err.message}`, msg);
+                node.error((0, utils_1.toCipError)(err, "Raw CIP request failed"), msg);
                 node.send((0, endpoint_dynamic_1.stampEndpoint)(msg, endpoint));
             }
             finally {

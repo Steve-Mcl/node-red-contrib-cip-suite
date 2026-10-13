@@ -11,7 +11,14 @@
  * @module cip-param
  */
 
-import { STATUS, withTiming, cipStatusText, toCipError } from "./utils";
+import {
+  STATUS,
+  withTiming,
+  cipStatusText,
+  toCipError,
+  describeCipError,
+  cipErrorFields,
+} from "./utils";
 
 const PARAMETER_CLASS = 0x0f;
 
@@ -494,9 +501,9 @@ module.exports = function (RED: any) {
 
         node.send(msg);
       } catch (err: any) {
-        msg.payload = { success: false, error: err.message };
-        node.error(`Parameter error: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        msg.payload = { success: false, ...cipErrorFields(err) };
+        node.error(`Parameter error: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         node.send(msg);
       } finally {
         node._busy = false;

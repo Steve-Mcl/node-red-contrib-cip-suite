@@ -6,7 +6,6 @@
  * - Connection metrics tracking
  * - readModifyWriteTag for atomic bit manipulation
  * - readWallClock / writeWallClock for controller time
- * - changeMode / resetFault for controller management
  * - Multi-hop routing support
  * - Metrics admin endpoint
  * @module cip-endpoint
@@ -19,7 +18,7 @@ import {
   CIPClass,
   CIP_TYPE_NAMES,
 } from "./types";
-import { withTiming, cipTypeName, toCipError } from "./utils";
+import { withTiming, cipTypeName, toCipError, guardReplyHandlers, describeCipError } from "./utils";
 
 const { Controller } = require("st-ethernet-ip");
 
@@ -40,13 +39,11 @@ const CIP_CONNECTION_FAILURE = 0x01;
  */
 const LIB_SESSION_TIMEOUT = 10000;
 
-
-/** Controller run mode constants for Set_Attribute_Single (class 0x01, attr 5) */
-const CONTROLLER_MODE: Record<string, number> = {
-  run: 0x0001,
-  program: 0x0000,
-  test: 0x0002,
-};
+/**
+ * st-ethernet-ip always dials 44818 and takes no port (SerafinTech/ST-node-ethernet-ip#85),
+ * so the configured port is kept but not used. Logs and info report the port actually used.
+ */
+const EIP_PORT = 44818;
 
 module.exports = function (RED: any) {
   function CipEndpointNode(this: any, config: CipEndpointConfig & { id: string; name: string }) {
@@ -267,7 +264,7 @@ module.exports = function (RED: any) {
         ...node.metrics,
         uptime: node.metrics.connectTime && node.connected ? Date.now() - node.metrics.connectTime : 0,
         address: node.address,
-        port: node.port,
+        port: EIP_PORT,
         slot: node.slot,
         useMicro800: node.useMicro800,
         routingPath: node.routingPath || null,
@@ -284,7 +281,7 @@ module.exports = function (RED: any) {
         try {
           w(err);
         } catch (e: any) {
-          node.error(`connect callback threw: ${e.message}`);
+          node.error(`connect callback threw: ${describeCipError(e)}`);
         }
       }
     };
@@ -360,7 +357,7 @@ module.exports = function (RED: any) {
 
       node.metrics.errorCount++;
       node.metrics.reconnectCount++;
-      node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + err.message : ""}`);
+      node.log(`Connection to ${node.address}:${EIP_PORT} lost${err ? ": " + describeCipError(err) : ""}`);
       node._settleConnect(err || new Error("Connection lost"));
       node._broadcast("cip:disconnected");
       if (!node._manualDisconnect) node._scheduleRetry();
@@ -409,18 +406,24 @@ module.exports = function (RED: any) {
         // underlying promise ever does settle.
         node._attemptId++;
         node._onConnectFailed(
-          new Error(`Timed out connecting to ${node.address}:${node.port} after ${budget}ms`),
+          new Error(`Timed out connecting to ${node.address}:${EIP_PORT} after ${budget}ms`),
           node.plc
         );
       }, budget);
 
       const onSettled = (): void => clearTimeout(watchdog);
 
+      if (node.port !== EIP_PORT && node._portWarned !== node.port) {
+        node._portWarned = node.port;
+        node.warn(`Port ${node.port} is ignored: st-ethernet-ip always connects on ${EIP_PORT}`);
+      }
+
       try {
         // Micro800: unconnected messaging (no ForwardOpen)
         // ControlLogix/CompactLogix: connected messaging
         node.plc = new Controller(!node.useMicro800);
         node.plc.timeout_sp = node.connTimeout;
+        guardReplyHandlers(node.plc, (text) => node.warn(text));
 
         if (node.useMicro800) {
           // Patch write_cip: Micro800 has no backplane, so skip UnconnectedSend wrapper.
@@ -460,7 +463,7 @@ module.exports = function (RED: any) {
                 await node.plc.getControllerTagList(node.plc.state.tagList);
               } catch (e: any) {
                 node.warn(
-                  `Micro800 tag list fetch failed (tags may not be browsable): ${e.message}`
+                  `Micro800 tag list fetch failed (tags may not be browsable): ${describeCipError(e)}`
                 );
               }
             }
@@ -473,7 +476,7 @@ module.exports = function (RED: any) {
             node._watchSocket(thisPlc);
             node._startKeepAlive();
             node.log(
-              `Connected to ${node.address}:${node.port} slot ${node.slot}${node.useMicro800 ? " (Micro800)" : ""}${node.routingPath ? " routing=" + node.routingPath : ""}`
+              `Connected to ${node.address}:${EIP_PORT} slot ${node.slot}${node.useMicro800 ? " (Micro800)" : ""}${node.routingPath ? " routing=" + node.routingPath : ""}`
             );
             node._settleConnect(null);
             node._broadcast("cip:connected");
@@ -882,71 +885,6 @@ module.exports = function (RED: any) {
     };
 
     /**
-     * Change the controller operating mode (Run / Program / Test).
-     * Sends CIP Set_Attribute_Single to Controller Object (class 0x01), instance 1, attribute 5.
-     */
-    node.changeMode = async function (mode: "run" | "program" | "test"): Promise<void> {
-      if (!node.connected || !node.plc) {
-        throw new Error("Not connected to PLC");
-      }
-
-      const modeValue = CONTROLLER_MODE[mode];
-      if (modeValue === undefined) {
-        throw new Error(`Invalid mode: ${mode}. Must be "run", "program", or "test"`);
-      }
-
-      // Build CIP Set_Attribute_Single request
-      // Path: class 0x01 (Identity/Controller), instance 1, attribute 5 (Mode)
-      const path = Buffer.from([0x20, CIPClass.IDENTITY, 0x24, 0x01, 0x30, 0x05]);
-      const data = Buffer.alloc(2);
-      data.writeUInt16LE(modeValue, 0);
-
-      const reqLen = 2 + path.length + data.length;
-      const reqBuf = Buffer.alloc(reqLen);
-      let offset = 0;
-      reqBuf.writeUInt8(CIPService.SET_ATTRIBUTE_SINGLE, offset++);
-      reqBuf.writeUInt8(path.length / 2, offset++);
-      path.copy(reqBuf, offset);
-      offset += path.length;
-      data.copy(reqBuf, offset);
-
-      await new Promise<void>((resolve, reject) => {
-        node.plc.write_cip(reqBuf, false, 10, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    };
-
-    /**
-     * Reset controller fault.
-     * Sends CIP Reset service (0x05) to Controller Object (class 0x01), instance 1.
-     */
-    node.resetFault = async function (): Promise<void> {
-      if (!node.connected || !node.plc) {
-        throw new Error("Not connected to PLC");
-      }
-
-      // Build CIP Reset request
-      const path = Buffer.from([0x20, CIPClass.IDENTITY, 0x24, 0x01]);
-      const reqBuf = Buffer.alloc(2 + path.length + 1);
-      let offset = 0;
-      reqBuf.writeUInt8(CIPService.RESET, offset++);
-      reqBuf.writeUInt8(path.length / 2, offset++);
-      path.copy(reqBuf, offset);
-      offset += path.length;
-      // Reset type 0 = non-power-cycle reset
-      reqBuf.writeUInt8(0x00, offset);
-
-      await new Promise<void>((resolve, reject) => {
-        node.plc.write_cip(reqBuf, false, 10, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    };
-
-    /**
      * Get the underlying Controller instance.
      */
     node.getController = function (): any {
@@ -985,7 +923,7 @@ module.exports = function (RED: any) {
       tags.sort((a: any, b: any) => a.name.localeCompare(b.name));
       res.json(tags);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: describeCipError(err) });
     }
   });
 
@@ -1002,7 +940,7 @@ module.exports = function (RED: any) {
       // Same payload msg.action="status" returns, so the two cannot drift.
       res.json(node.getStatus());
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: describeCipError(err) });
     }
   });
 };

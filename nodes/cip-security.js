@@ -78,7 +78,7 @@ module.exports = function (RED) {
                     opts.cert = fs.readFileSync(node._certPath);
                 }
                 catch (e) {
-                    node.warn(`Cannot read certificate: ${e.message}`);
+                    node.warn(`Cannot read certificate: ${(0, utils_1.describeCipError)(e)}`);
                 }
             }
             if (node._keyPath) {
@@ -86,7 +86,7 @@ module.exports = function (RED) {
                     opts.key = fs.readFileSync(node._keyPath);
                 }
                 catch (e) {
-                    node.warn(`Cannot read key: ${e.message}`);
+                    node.warn(`Cannot read key: ${(0, utils_1.describeCipError)(e)}`);
                 }
             }
             if (node._caPath) {
@@ -94,7 +94,7 @@ module.exports = function (RED) {
                     opts.ca = fs.readFileSync(node._caPath);
                 }
                 catch (e) {
-                    node.warn(`Cannot read CA certificate: ${e.message}`);
+                    node.warn(`Cannot read CA certificate: ${(0, utils_1.describeCipError)(e)}`);
                 }
             }
             return opts;
@@ -250,11 +250,11 @@ module.exports = function (RED) {
                                 node.send(msg);
                             });
                             node._tlsSocket.on("error", (err) => {
-                                node.error(`TLS error: ${err.message}`);
+                                node.error(`TLS error: ${(0, utils_1.describeCipError)(err)}`);
                                 msg.payload = {
                                     success: false,
                                     command: "connect-tls",
-                                    error: err.message,
+                                    error: (0, utils_1.describeCipError)(err),
                                 };
                                 node.send(msg);
                             });
@@ -266,7 +266,7 @@ module.exports = function (RED) {
                             msg.payload = {
                                 success: false,
                                 command: "connect-tls",
-                                error: err.message,
+                                error: (0, utils_1.describeCipError)(err),
                             };
                         }
                         break;
@@ -305,9 +305,9 @@ module.exports = function (RED) {
                 node.send(msg);
             }
             catch (err) {
-                msg.payload = { success: false, error: err.message, timestamp: Date.now() };
-                node.error(`CIP Security error: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
+                msg.payload = { success: false, ...(0, utils_1.cipErrorFields)(err), timestamp: Date.now() };
+                node.error(`CIP Security error: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                 node.send(msg);
             }
             finally {

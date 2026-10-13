@@ -161,13 +161,20 @@ export const CIP_STATUS: Record<number, string> = {
   0x14: "Attribute not supported",
   0x15: "Too much data",
   0x16: "Object does not exist",
-  0x1a: "No stored attribute data",
-  0x1b: "Store operation failure",
-  0x1c: "Routing failure, request too large",
-  0x1d: "Routing failure, response too large",
-  0x1e: "Missing attribute list entry data",
-  0x1f: "Invalid attribute value list",
-  0x20: "Embedded service error",
+  0x17: "Fragmentation sequence error",
+  0x18: "No stored attribute data",
+  0x19: "Store operation failure",
+  0x1a: "Routing failure, request too large",
+  0x1b: "Routing failure, response too large",
+  0x1c: "Missing attribute list entry data",
+  0x1d: "Invalid attribute value list",
+  0x1e: "Embedded service error",
+  0x1f: "Vendor specific error",
+  0x20: "Invalid parameter",
+  0x21: "Write-once value already written",
+  0x22: "Invalid reply received",
+  0x23: "Buffer overflow",
+  0x24: "Message format error",
   0x25: "Key failure in path",
   0x26: "Path size invalid",
   0x27: "Unexpected attribute in list",
@@ -321,8 +328,6 @@ export interface CipEndpointNode extends NodeRedNode {
   request(req: Buffer, opts?: { connected?: boolean }): Promise<Buffer>;
   readWallClock(): Promise<Date>;
   writeWallClock(date?: Date): Promise<void>;
-  changeMode(mode: "run" | "program" | "test"): Promise<void>;
-  resetFault(): Promise<void>;
   getController(): any;
 }
 
@@ -460,6 +465,8 @@ export interface WriteResult {
   tagName: string;
   value: any;
   error?: string;
+  generalStatusCode?: number;
+  extendedStatus?: number[];
   timestamp: number;
 }
 
@@ -468,6 +475,8 @@ export interface MultiTagResult {
   value: any;
   type: string;
   error?: string;
+  generalStatusCode?: number;
+  extendedStatus?: number[];
 }
 
 // ── CIP Security (Object 0x5D) ──

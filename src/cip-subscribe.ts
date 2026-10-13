@@ -11,7 +11,7 @@ import {
   CipSubscribeConfig,
   NodeStatus,
 } from "./types";
-import { parseTagList, cipTypeName, STATUS } from "./utils";
+import { parseTagList, cipTypeName, STATUS, describeCipError } from "./utils";
 import {
   DynOpts,
   handleEndpointMsg,
@@ -157,7 +157,7 @@ module.exports = function (RED: any) {
             changed: false,
           });
         } catch (err: any) {
-          node.warn(`Failed to add tag "${name}": ${err.message}`);
+          node.warn(`Failed to add tag "${name}": ${describeCipError(err)}`);
         }
       }
       node._tagStates = states;
@@ -204,7 +204,7 @@ module.exports = function (RED: any) {
             processScanResults(endpoint);
           }
         } catch (err: any) {
-          if (current()) node.log(`Scan error: ${err.message}`);
+          if (current()) node.log(`Scan error: ${describeCipError(err)}`);
         } finally {
           // A superseded cycle must not clear the flag out from under its replacement.
           if (node._scanGen === gen) node._inFlight = false;

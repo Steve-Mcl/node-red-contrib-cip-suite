@@ -13,7 +13,7 @@
  * @module cip-sync
  */
 
-import { STATUS, withTiming, cipStatusText } from "./utils";
+import { STATUS, withTiming, cipStatusText, describeCipError, cipErrorFields } from "./utils";
 
 const TIME_SYNC_CLASS = 0x43;
 
@@ -299,7 +299,7 @@ module.exports = function (RED: any) {
         });
         node.send({ payload: result });
       } catch (err: any) {
-        node.status(STATUS.error(err.message));
+        node.status(STATUS.error(describeCipError(err)));
       } finally {
         node._busy = false;
       }
@@ -373,9 +373,9 @@ module.exports = function (RED: any) {
         node.status({ fill: "green", shape: "dot", text: command });
         node.send(msg);
       } catch (err: any) {
-        msg.payload = { success: false, error: err.message };
-        node.error(`CIP Sync error: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        msg.payload = { success: false, ...cipErrorFields(err) };
+        node.error(`CIP Sync error: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         node.send(msg);
       } finally {
         node._busy = false;

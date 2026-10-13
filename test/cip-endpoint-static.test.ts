@@ -587,3 +587,23 @@ describe("admin routes", () => {
     expect(res.code).toBe(503);
   });
 });
+
+describe("port (#18)", () => {
+  it("warns once that a configured port is ignored and reports 44818", async () => {
+    const node = makeEndpoint({ port: 44819 });
+    await connectAndWait(node);
+    await node.disconnect();
+    await connectAndWait(node);
+
+    const warnings = node.warn.mock.calls.map((c: any[]) => c[0]);
+    expect(warnings.filter((w: string) => /Port 44819 is ignored/.test(w))).toHaveLength(1);
+    expect(node.getStatus().port).toBe(44818);
+    expect(node.log).toHaveBeenCalledWith(expect.stringContaining("Connected to 10.0.0.1:44818"));
+  });
+
+  it("stays quiet on the standard port", async () => {
+    const node = makeEndpoint();
+    await connectAndWait(node);
+    expect(node.warn).not.toHaveBeenCalledWith(expect.stringContaining("is ignored"));
+  });
+});

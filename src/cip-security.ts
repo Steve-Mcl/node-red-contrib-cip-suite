@@ -13,7 +13,7 @@
 import * as tls from "tls";
 import * as fs from "fs";
 import * as net from "net";
-import { STATUS } from "./utils";
+import { STATUS, describeCipError, cipErrorFields } from "./utils";
 
 interface CipSecurityConfig {
   endpoint: string;
@@ -59,7 +59,7 @@ module.exports = function (RED: any) {
         try {
           opts.cert = fs.readFileSync(node._certPath);
         } catch (e: any) {
-          node.warn(`Cannot read certificate: ${e.message}`);
+          node.warn(`Cannot read certificate: ${describeCipError(e)}`);
         }
       }
 
@@ -67,7 +67,7 @@ module.exports = function (RED: any) {
         try {
           opts.key = fs.readFileSync(node._keyPath);
         } catch (e: any) {
-          node.warn(`Cannot read key: ${e.message}`);
+          node.warn(`Cannot read key: ${describeCipError(e)}`);
         }
       }
 
@@ -75,7 +75,7 @@ module.exports = function (RED: any) {
         try {
           opts.ca = fs.readFileSync(node._caPath);
         } catch (e: any) {
-          node.warn(`Cannot read CA certificate: ${e.message}`);
+          node.warn(`Cannot read CA certificate: ${describeCipError(e)}`);
         }
       }
 
@@ -235,11 +235,11 @@ module.exports = function (RED: any) {
               });
 
               node._tlsSocket.on("error", (err: Error) => {
-                node.error(`TLS error: ${err.message}`);
+                node.error(`TLS error: ${describeCipError(err)}`);
                 msg.payload = {
                   success: false,
                   command: "connect-tls",
-                  error: err.message,
+                  error: describeCipError(err),
                 };
                 node.send(msg);
               });
@@ -251,7 +251,7 @@ module.exports = function (RED: any) {
               msg.payload = {
                 success: false,
                 command: "connect-tls",
-                error: err.message,
+                error: describeCipError(err),
               };
             }
             break;
@@ -294,9 +294,9 @@ module.exports = function (RED: any) {
         node.status({ fill: "green", shape: "dot", text: command });
         node.send(msg);
       } catch (err: any) {
-        msg.payload = { success: false, error: err.message, timestamp: Date.now() };
-        node.error(`CIP Security error: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        msg.payload = { success: false, ...cipErrorFields(err), timestamp: Date.now() };
+        node.error(`CIP Security error: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         node.send(msg);
       } finally {
         node._busy = false;

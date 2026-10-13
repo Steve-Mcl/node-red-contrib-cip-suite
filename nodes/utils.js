@@ -3,9 +3,11 @@
  * Shared utilities for cip-suite nodes.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.STATUS = void 0;
+exports.STATUS = exports.LIB_REPLY_HANDLERS = void 0;
 exports.parseTagName = parseTagName;
 exports.parseProgramScope = parseProgramScope;
+exports.isPlainObject = isPlainObject;
+exports.mergeMembers = mergeMembers;
 exports.findTagListEntry = findTagListEntry;
 exports.canonicalizeTagName = canonicalizeTagName;
 exports.resolveMemberInfo = resolveMemberInfo;
@@ -16,6 +18,8 @@ exports.cipStatusText = cipStatusText;
 exports.cipTypeName = cipTypeName;
 exports.describeCipError = describeCipError;
 exports.toCipError = toCipError;
+exports.cipErrorFields = cipErrorFields;
+exports.guardReplyHandlers = guardReplyHandlers;
 exports.debounce = debounce;
 exports.parseTagList = parseTagList;
 exports.withTiming = withTiming;
@@ -65,6 +69,41 @@ function parseProgramScope(tagName) {
         return { program: match[1], name: match[2] };
     }
     return { program: null, name: tagName };
+}
+/** A plain `{ ... }` object, not an array, Buffer, Date or null. */
+function isPlainObject(v) {
+    return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+}
+/**
+ * Lay `patch` over a UDT value read from the controller, so a payload naming only some
+ * members leaves the rest as they are. Nested UDTs merge the same way; an array in the
+ * patch replaces elements by index and keeps the array's length. A key the UDT does not
+ * have is an error, since the library would otherwise drop it without a word.
+ */
+function mergeMembers(current, patch, path = "") {
+    if (Array.isArray(current) && Array.isArray(patch)) {
+        if (patch.length > current.length) {
+            throw new Error(`${path || "value"} has ${current.length} elements, got ${patch.length}`);
+        }
+        const out = current.slice();
+        patch.forEach((v, i) => {
+            out[i] = mergeMembers(current[i], v, `${path}[${i}]`);
+        });
+        return out;
+    }
+    if (isPlainObject(current) && isPlainObject(patch)) {
+        const out = { ...current };
+        for (const key of Object.keys(patch)) {
+            // Logix member names are case-insensitive.
+            const match = Object.keys(current).find((k) => k.toLowerCase() === key.toLowerCase());
+            if (match === undefined) {
+                throw new Error(`${path ? path + "." : ""}${key} is not a member of the UDT`);
+            }
+            out[match] = mergeMembers(current[match], patch[key], path ? `${path}.${match}` : match);
+        }
+        return out;
+    }
+    return patch;
 }
 /** Strip a trailing array subscript ("FBACTUAL[3]" -> "FBACTUAL"). */
 function stripSubscript(segment) {
@@ -266,6 +305,61 @@ function toCipError(err, prefix) {
             wrapped.extendedStatus = err.extendedStatus;
     }
     return wrapped;
+}
+/**
+ * The error fields of a failed result: readable text plus, for a CIP refusal, the raw
+ * status codes so a flow can branch on them instead of parsing text.
+ */
+function cipErrorFields(err) {
+    const fields = {
+        error: describeCipError(err),
+    };
+    if (err && typeof err === "object" && typeof err.generalStatusCode === "number") {
+        fields.generalStatusCode = err.generalStatusCode;
+        fields.extendedStatus = Array.isArray(err.extendedStatus) ? err.extendedStatus : [];
+    }
+    return fields;
+}
+/**
+ * The st-ethernet-ip reply handlers that run inside the socket 'data' event. Anything
+ * they throw is uncaught and takes down the whole Node-RED process.
+ */
+exports.LIB_REPLY_HANDLERS = ["_handleSendRRDataReceived", "_handleSendUnitDataReceived"];
+/**
+ * Wrap the library's reply handlers so a reply it cannot parse is logged instead of
+ * crashing Node-RED (SerafinTech/ST-node-ethernet-ip#84: a Multiple Service Packet reply
+ * with outer status 0 and a failed embedded reply dereferences null).
+ *
+ * Must run before connect(), which is where the library registers these handlers.
+ * When the failed reply was a Multiple Service Packet, its waiter is failed straight away
+ * with 0x1E (embedded service error) rather than left to time out.
+ */
+function guardReplyHandlers(plc, warn) {
+    for (const name of exports.LIB_REPLY_HANDLERS) {
+        const original = plc[name];
+        if (typeof original !== "function")
+            continue;
+        // SendUnitData carries a 2-byte connection sequence count ahead of the CIP reply.
+        const serviceOffset = name === "_handleSendUnitDataReceived" ? 2 : 0;
+        plc[name] = function (...args) {
+            try {
+                return original.apply(this, args);
+            }
+            catch (e) {
+                warn(`Ignored a CIP reply the library could not handle: ${describeCipError(e)}`);
+                let service;
+                try {
+                    service = args[0][1].data.readUInt8(serviceOffset);
+                }
+                catch {
+                    // reply too short to name its service
+                }
+                if (service === 0x8a) {
+                    this.emit("Multiple Service Packet", { generalStatusCode: 0x1e, extendedStatus: [] }, []);
+                }
+            }
+        };
+    }
 }
 /**
  * Standard Node-RED status objects.

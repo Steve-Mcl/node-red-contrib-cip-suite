@@ -23,6 +23,10 @@ import {
   cipTypeName,
   describeCipError,
   toCipError,
+  parseProgramScope,
+  isPlainObject,
+  mergeMembers,
+  cipErrorFields,
 } from "./utils";
 import {
   DynOpts,
@@ -33,6 +37,18 @@ import {
   endpointLabel,
   applyInitialStatus
 } from "./endpoint-dynamic";
+
+/**
+ * The tag types each Data Type option accepts. Logix holds STRING as a structure, so the
+ * STRING option takes STRUCT as well as the atomic string types.
+ */
+const DATA_TYPE_MATCHES: Record<string, string[]> = {
+  BOOL: ["BOOL"],
+  INT: ["INT"],
+  DINT: ["DINT"],
+  REAL: ["REAL"],
+  STRING: ["STRING", "SHORT_STRING", "STRING2", "STRINGN", "STRINGI", "STRUCT"],
+};
 
 module.exports = function (RED: any) {
   function CipWriteNode(this: any, config: any) {
@@ -46,6 +62,20 @@ module.exports = function (RED: any) {
     node.useStaticValue = config.useStaticValue || false;
     node.useAtomicBitWrite = config.useAtomicBitWrite || false;
     node._writing = false;
+
+    /**
+     * Every write reads the tag first, so the controller's own type is what goes out.
+     * A Data Type other than Auto only checks that type, so a node meant for a REAL
+     * fails clearly instead of writing a tag it was not set up for.
+     */
+    function checkDataType(tag: any, tagName: string): void {
+      const accepted = DATA_TYPE_MATCHES[node.dataType];
+      if (!accepted) return;
+      const actual = typeof tag.type === "number" ? cipTypeName(tag.type) : String(tag.type);
+      if (!accepted.includes(actual)) {
+        throw new Error(`${tagName} is ${actual}, but the node's Data Type is ${node.dataType}`);
+      }
+    }
 
     if (!node.endpoint) {
       node.status({ fill: "red", shape: "ring", text: "no endpoint" });
@@ -114,13 +144,7 @@ module.exports = function (RED: any) {
       const controller = endpoint.getController();
       if (!controller) throw new Error("Controller not available");
 
-      const { Tag } = require("st-ethernet-ip");
-      let Structure: any;
-      try {
-        Structure = require("st-ethernet-ip").Structure;
-      } catch {
-        // Structure class may not be available
-      }
+      const { Tag, Structure } = require("st-ethernet-ip");
 
       // Bit-level write: "MyDint.5"
       if (parsed.bitIndex !== null) {
@@ -147,7 +171,7 @@ module.exports = function (RED: any) {
           } catch (err: any) {
             // Fall through to software read-modify-write
             node.warn(
-              `Atomic bit write failed, falling back to software RMW: ${err.message}`
+              `Atomic bit write failed, falling back to software RMW: ${describeCipError(err)}`
             );
           }
         }
@@ -186,6 +210,7 @@ module.exports = function (RED: any) {
           const idx = parsed.arrayStart + i;
           const elemTag = new Tag(`${parsed.baseName}[${idx}]`);
           await controller.readTag(elemTag); // init type
+          checkDataType(elemTag, elemTag.name);
           elemTag.value = value[i];
           await controller.writeTag(elemTag);
         }
@@ -197,12 +222,33 @@ module.exports = function (RED: any) {
         };
       }
 
-      // Array element write: "MyArray[3]"
-      if (parsed.arrayIndex !== null) {
-        const tag = new Tag(`${parsed.baseName}[${parsed.arrayIndex}]`);
-        await controller.readTag(tag); // init type
-        tag.value = value;
-        await controller.writeTag(tag);
+      // Array element ("MyArray[3]") or whole tag. Read it first: that sets the type the
+      // write goes out with, and says whether it is a UDT.
+      const fullName =
+        parsed.arrayIndex !== null ? `${parsed.baseName}[${parsed.arrayIndex}]` : parsed.baseName;
+      const tag = new Tag(fullName);
+      await controller.readTag(tag); // init type
+      checkDataType(tag, tagName);
+
+      // UDT write. Tag.type is the type name, so a structure reads as "STRUCT".
+      if (tag.type === "STRUCT" && isPlainObject(value)) {
+        const scope = parseProgramScope(fullName);
+        const tagList = controller.state?.tagList;
+        // newTag() returns a Structure when the tag list holds the template, which is what
+        // turns the object into the controller's byte layout.
+        const struct =
+          typeof controller.newTag === "function" && tagList
+            ? controller.newTag(scope.name, scope.program, false)
+            : new Structure(scope.name, tagList, scope.program);
+        await controller.readTag(struct);
+        if (!isPlainObject(struct.value)) {
+          throw new Error(
+            `${tagName} is a UDT, but its template is not in the tag list, so it cannot be written as an object`
+          );
+        }
+        // Members not in msg.payload keep the values just read.
+        struct.value = mergeMembers(struct.value, value);
+        await controller.writeTag(struct);
         return {
           success: true,
           tagName,
@@ -211,48 +257,8 @@ module.exports = function (RED: any) {
         };
       }
 
-      // UDT/Structure write
-      const tag = new Tag(parsed.baseName);
-      await controller.readTag(tag); // init type
-
-      const typeCode =
-        typeof tag.type === "object" && tag.type !== null ? tag.type.code : tag.type;
-      if (
-        typeCode === CIPDataType.STRUCT &&
-        Structure &&
-        typeof Structure === "function" &&
-        typeof value === "object" &&
-        value !== null
-      ) {
-        try {
-          const struct = new Structure(parsed.baseName);
-          await controller.readTag(struct);
-          // Apply new values to the structure
-          if (typeof struct.value === "object" && struct.value !== null) {
-            Object.assign(struct.value, value);
-          } else {
-            struct.value = value;
-          }
-          await controller.writeTag(struct);
-          return {
-            success: true,
-            tagName,
-            value,
-            timestamp: Date.now(),
-          };
-        } catch {
-          // Fall through to standard write
-        }
-      }
-
       // Standard tag write
       tag.value = value;
-      if (node.dataType !== "auto") {
-        const explicitType = parseInt(node.dataType, 16);
-        if (!isNaN(explicitType)) {
-          tag.type = explicitType;
-        }
-      }
       await controller.writeTag(tag);
 
       return {
@@ -280,7 +286,7 @@ module.exports = function (RED: any) {
             success: false,
             tagName: item.name,
             value: item.value,
-            error: err.message,
+            ...cipErrorFields(err),
             timestamp: Date.now(),
           });
         }
@@ -369,13 +375,10 @@ module.exports = function (RED: any) {
         msg.payload = {
           success: false,
           tagName: msg.tagName || node.tagName,
-          error: err.message,
+          ...cipErrorFields(err),
           timestamp: Date.now(),
         } as WriteResult;
-        node.error(
-          `Write failed for ${msg.tagName || node.tagName}: ${err.message}`,
-          msg
-        );
+        node.error(toCipError(err, `Write failed for ${msg.tagName || node.tagName}`), msg);
         node.send(stampEndpoint(msg, endpoint));
       } finally {
         node._writing = false;
