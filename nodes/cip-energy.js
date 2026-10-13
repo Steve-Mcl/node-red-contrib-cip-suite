@@ -273,7 +273,7 @@ module.exports = function (RED) {
                 node.send({ payload: result });
             }
             catch (err) {
-                node.status(utils_1.STATUS.error(err.message));
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
             }
             finally {
                 node._busy = false;
@@ -341,9 +341,9 @@ module.exports = function (RED) {
                 node.send(msg);
             }
             catch (err) {
-                msg.payload = { success: false, error: err.message };
-                node.error(`Energy error: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
+                msg.payload = { success: false, ...(0, utils_1.cipErrorFields)(err) };
+                node.error(`Energy error: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                 node.send(msg);
             }
             finally {

@@ -18,7 +18,7 @@ import {
   CIPClass,
   CIP_TYPE_NAMES,
 } from "./types";
-import { withTiming, cipTypeName, toCipError, guardReplyHandlers } from "./utils";
+import { withTiming, cipTypeName, toCipError, guardReplyHandlers, describeCipError } from "./utils";
 
 const { Controller } = require("st-ethernet-ip");
 
@@ -276,7 +276,7 @@ module.exports = function (RED: any) {
         try {
           w(err);
         } catch (e: any) {
-          node.error(`connect callback threw: ${e.message}`);
+          node.error(`connect callback threw: ${describeCipError(e)}`);
         }
       }
     };
@@ -352,7 +352,7 @@ module.exports = function (RED: any) {
 
       node.metrics.errorCount++;
       node.metrics.reconnectCount++;
-      node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + err.message : ""}`);
+      node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + describeCipError(err) : ""}`);
       node._settleConnect(err || new Error("Connection lost"));
       node._broadcast("cip:disconnected");
       if (!node._manualDisconnect) node._scheduleRetry();
@@ -453,7 +453,7 @@ module.exports = function (RED: any) {
                 await node.plc.getControllerTagList(node.plc.state.tagList);
               } catch (e: any) {
                 node.warn(
-                  `Micro800 tag list fetch failed (tags may not be browsable): ${e.message}`
+                  `Micro800 tag list fetch failed (tags may not be browsable): ${describeCipError(e)}`
                 );
               }
             }
@@ -849,7 +849,7 @@ module.exports = function (RED: any) {
       tags.sort((a: any, b: any) => a.name.localeCompare(b.name));
       res.json(tags);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: describeCipError(err) });
     }
   });
 
@@ -866,7 +866,7 @@ module.exports = function (RED: any) {
       // Same payload msg.action="status" returns, so the two cannot drift.
       res.json(node.getStatus());
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: describeCipError(err) });
     }
   });
 };

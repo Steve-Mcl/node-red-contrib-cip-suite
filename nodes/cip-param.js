@@ -498,9 +498,9 @@ module.exports = function (RED) {
                 node.send(msg);
             }
             catch (err) {
-                msg.payload = { success: false, error: err.message };
-                node.error(`Parameter error: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
+                msg.payload = { success: false, ...(0, utils_1.cipErrorFields)(err) };
+                node.error(`Parameter error: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                 node.send(msg);
             }
             finally {

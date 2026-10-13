@@ -35,7 +35,7 @@ module.exports = function (RED) {
             node.status(utils_1.STATUS.disconnected());
         });
         node.on("pccc:error", (err) => {
-            node.status(utils_1.STATUS.error(err.message));
+            node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
         });
         // ── Write logic ──
         async function doWrite(addressStr, value, msg) {
@@ -47,9 +47,9 @@ module.exports = function (RED) {
                 parsedAddr = (0, pccc_utils_1.parsePCCCAddress)(addressStr);
             }
             catch (err) {
-                node.error(`Invalid PCCC address "${addressStr}": ${err.message}`, msg);
+                node.error(`Invalid PCCC address "${addressStr}": ${(0, utils_1.describeCipError)(err)}`, msg);
                 node._writing = false;
-                sendResult(msg, addressStr, value, false, err.message);
+                sendResult(msg, addressStr, value, false, (0, utils_1.describeCipError)(err));
                 return;
             }
             try {
@@ -66,9 +66,9 @@ module.exports = function (RED) {
                 node.status(utils_1.STATUS.connected());
             }
             catch (err) {
-                node.error(`PCCC write "${addressStr}" failed: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
-                sendResult(msg, parsedAddr.displayAddress, value, false, err.message);
+                node.error(`PCCC write "${addressStr}" failed: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
+                sendResult(msg, parsedAddr.displayAddress, value, false, (0, utils_1.describeCipError)(err));
             }
             finally {
                 node._writing = false;

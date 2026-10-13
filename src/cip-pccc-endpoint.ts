@@ -12,6 +12,7 @@
 import * as net from "net";
 import { buildCIPPcccMessage } from "./pccc-utils";
 import { CipPcccEndpointConfig } from "./types";
+import { describeCipError } from "./utils";
 
 // EtherNet/IP encapsulation commands
 const ENCAP_CMD_REGISTER_SESSION = 0x0065;
@@ -147,7 +148,7 @@ module.exports = function (RED: any) {
           node.connecting = false;
           if (node.connected) {
             node.connected = false;
-            node.error(`Connection error: ${err.message}`);
+            node.error(`Connection error: ${describeCipError(err)}`);
             node._broadcast("pccc:error", err);
             node._broadcast("pccc:disconnected");
           }
@@ -180,7 +181,7 @@ module.exports = function (RED: any) {
         });
       } catch (err: any) {
         node.connecting = false;
-        node.error(`Connection failed: ${err.message}`);
+        node.error(`Connection failed: ${describeCipError(err)}`);
         node._broadcast("pccc:error", err);
         node._scheduleRetry();
       }
@@ -392,7 +393,7 @@ module.exports = function (RED: any) {
         } catch (err: any) {
           clearTimeout(timer);
           node._pendingRequests.delete(tns);
-          reject(new Error(`Socket write error: ${err.message}`));
+          reject(new Error(`Socket write error: ${describeCipError(err)}`));
         }
       });
     };
