@@ -39,7 +39,7 @@ module.exports = function (RED) {
             node._stopPolling();
         });
         node.on("pccc:error", (err) => {
-            node.status(utils_1.STATUS.error(err.message));
+            node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
         });
         // ── Read logic ──
         async function doRead(addressStr, count, msg) {
@@ -52,7 +52,7 @@ module.exports = function (RED) {
                     parsedAddr = (0, pccc_utils_1.parsePCCCAddress)(addressStr);
                 }
                 catch (err) {
-                    node.error(`Invalid PCCC address "${addressStr}": ${err.message}`, msg);
+                    node.error(`Invalid PCCC address "${addressStr}": ${(0, utils_1.describeCipError)(err)}`, msg);
                     node._reading = false;
                     return;
                 }
@@ -93,8 +93,8 @@ module.exports = function (RED) {
                 node.status(utils_1.STATUS.connected());
             }
             catch (err) {
-                node.error(`PCCC read "${addressStr}" failed: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
+                node.error(`PCCC read "${addressStr}" failed: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
             }
             finally {
                 node._reading = false;

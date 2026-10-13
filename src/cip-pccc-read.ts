@@ -16,7 +16,7 @@ import {
   PCCC_FNC,
 } from "./pccc-utils";
 import { PCCCAddress } from "./types";
-import { STATUS } from "./utils";
+import { STATUS, describeCipError } from "./utils";
 
 module.exports = function (RED: any) {
   function CipPcccReadNode(this: any, config: any) {
@@ -54,7 +54,7 @@ module.exports = function (RED: any) {
     });
 
     node.on("pccc:error", (err: Error) => {
-      node.status(STATUS.error(err.message));
+      node.status(STATUS.error(describeCipError(err)));
     });
 
     // ── Read logic ──
@@ -68,7 +68,7 @@ module.exports = function (RED: any) {
         try {
           parsedAddr = parsePCCCAddress(addressStr);
         } catch (err: any) {
-          node.error(`Invalid PCCC address "${addressStr}": ${err.message}`, msg);
+          node.error(`Invalid PCCC address "${addressStr}": ${describeCipError(err)}`, msg);
           node._reading = false;
           return;
         }
@@ -114,8 +114,8 @@ module.exports = function (RED: any) {
         node.send(outMsg);
         node.status(STATUS.connected());
       } catch (err: any) {
-        node.error(`PCCC read "${addressStr}" failed: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        node.error(`PCCC read "${addressStr}" failed: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
       } finally {
         node._reading = false;
       }

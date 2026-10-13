@@ -204,8 +204,8 @@ module.exports = function (RED) {
             try {
                 socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
                 socket.on("error", (err) => {
-                    node.error(`Discovery error: ${err.message}`, msg);
-                    node.status(utils_1.STATUS.error(err.message));
+                    node.error(`Discovery error: ${(0, utils_1.describeCipError)(err)}`, msg);
+                    node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                     cleanup();
                 });
                 socket.on("message", (data, rinfo) => {
@@ -230,8 +230,8 @@ module.exports = function (RED) {
                     const packet = buildListIdentityPacket();
                     socket.send(packet, 0, packet.length, EIP_PORT, broadcastAddr, (err) => {
                         if (err) {
-                            node.error(`Failed to send ListIdentity: ${err.message}`, msg);
-                            node.status(utils_1.STATUS.error(err.message));
+                            node.error(`Failed to send ListIdentity: ${(0, utils_1.describeCipError)(err)}`, msg);
+                            node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                             cleanup();
                             return;
                         }
@@ -241,8 +241,8 @@ module.exports = function (RED) {
                 });
             }
             catch (err) {
-                node.error(`Discovery failed: ${err.message}`, msg);
-                node.status(utils_1.STATUS.error(err.message));
+                node.error(`Discovery failed: ${(0, utils_1.describeCipError)(err)}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
                 cleanup();
             }
         });

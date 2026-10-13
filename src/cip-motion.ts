@@ -14,7 +14,7 @@
  * @module cip-motion
  */
 
-import { STATUS, withTiming, cipStatusText } from "./utils";
+import { STATUS, withTiming, cipStatusText, describeCipError, cipErrorFields } from "./utils";
 
 const MOTION_AXIS_CLASS = 0x42;
 const MOTION_GROUP_CLASS = 0x41;
@@ -358,7 +358,7 @@ module.exports = function (RED: any) {
         node.status({ fill: "green", shape: "dot", text: `${stateText} P=${status.actualPosition?.toFixed(1) || "?"}` });
         node.send({ payload: status });
       } catch (err: any) {
-        node.status(STATUS.error(err.message));
+        node.status(STATUS.error(describeCipError(err)));
       } finally {
         node._busy = false;
       }
@@ -393,9 +393,9 @@ module.exports = function (RED: any) {
         node.status({ fill: msg.payload.success ? "green" : "red", shape: "dot", text: cmdText });
         node.send(msg);
       } catch (err: any) {
-        msg.payload = { success: false, error: err.message };
-        node.error(`Motion error: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        msg.payload = { success: false, ...cipErrorFields(err) };
+        node.error(`Motion error: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         node.send(msg);
       } finally {
         node._busy = false;

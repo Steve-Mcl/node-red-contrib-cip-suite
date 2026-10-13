@@ -45,6 +45,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const net = __importStar(require("net"));
 const pccc_utils_1 = require("./pccc-utils");
+const utils_1 = require("./utils");
 // EtherNet/IP encapsulation commands
 const ENCAP_CMD_REGISTER_SESSION = 0x0065;
 const ENCAP_CMD_SEND_RR_DATA = 0x006f;
@@ -157,7 +158,7 @@ module.exports = function (RED) {
                     node.connecting = false;
                     if (node.connected) {
                         node.connected = false;
-                        node.error(`Connection error: ${err.message}`);
+                        node.error(`Connection error: ${(0, utils_1.describeCipError)(err)}`);
                         node._broadcast("pccc:error", err);
                         node._broadcast("pccc:disconnected");
                     }
@@ -188,7 +189,7 @@ module.exports = function (RED) {
             }
             catch (err) {
                 node.connecting = false;
-                node.error(`Connection failed: ${err.message}`);
+                node.error(`Connection failed: ${(0, utils_1.describeCipError)(err)}`);
                 node._broadcast("pccc:error", err);
                 node._scheduleRetry();
             }
@@ -376,7 +377,7 @@ module.exports = function (RED) {
                 catch (err) {
                     clearTimeout(timer);
                     node._pendingRequests.delete(tns);
-                    reject(new Error(`Socket write error: ${err.message}`));
+                    reject(new Error(`Socket write error: ${(0, utils_1.describeCipError)(err)}`));
                 }
             });
         };

@@ -265,7 +265,7 @@ module.exports = function (RED) {
                     w(err);
                 }
                 catch (e) {
-                    node.error(`connect callback threw: ${e.message}`);
+                    node.error(`connect callback threw: ${(0, utils_1.describeCipError)(e)}`);
                 }
             }
         };
@@ -342,7 +342,7 @@ module.exports = function (RED) {
                 return;
             node.metrics.errorCount++;
             node.metrics.reconnectCount++;
-            node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + err.message : ""}`);
+            node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + (0, utils_1.describeCipError)(err) : ""}`);
             node._settleConnect(err || new Error("Connection lost"));
             node._broadcast("cip:disconnected");
             if (!node._manualDisconnect)
@@ -434,7 +434,7 @@ module.exports = function (RED) {
                             await node.plc.getControllerTagList(node.plc.state.tagList);
                         }
                         catch (e) {
-                            node.warn(`Micro800 tag list fetch failed (tags may not be browsable): ${e.message}`);
+                            node.warn(`Micro800 tag list fetch failed (tags may not be browsable): ${(0, utils_1.describeCipError)(e)}`);
                         }
                     }
                     node.connecting = false;
@@ -861,7 +861,7 @@ module.exports = function (RED) {
             res.json(tags);
         }
         catch (err) {
-            res.status(500).json({ error: err.message });
+            res.status(500).json({ error: (0, utils_1.describeCipError)(err) });
         }
     });
     /**
@@ -878,7 +878,7 @@ module.exports = function (RED) {
             res.json(node.getStatus());
         }
         catch (err) {
-            res.status(500).json({ error: err.message });
+            res.status(500).json({ error: (0, utils_1.describeCipError)(err) });
         }
     });
 };
