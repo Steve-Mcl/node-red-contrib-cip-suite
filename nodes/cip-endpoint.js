@@ -398,6 +398,7 @@ module.exports = function (RED) {
                 // ControlLogix/CompactLogix: connected messaging
                 node.plc = new Controller(!node.useMicro800);
                 node.plc.timeout_sp = node.connTimeout;
+                (0, utils_1.guardReplyHandlers)(node.plc, (text) => node.warn(text));
                 if (node.useMicro800) {
                     // Patch write_cip: Micro800 has no backplane, so skip UnconnectedSend wrapper.
                     // Send CIP messages directly as UCMM (SendRRData) without routing path.

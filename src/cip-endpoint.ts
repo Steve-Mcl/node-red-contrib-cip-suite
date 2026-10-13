@@ -19,7 +19,7 @@ import {
   CIPClass,
   CIP_TYPE_NAMES,
 } from "./types";
-import { withTiming, cipTypeName, toCipError } from "./utils";
+import { withTiming, cipTypeName, toCipError, guardReplyHandlers } from "./utils";
 
 const { Controller } = require("st-ethernet-ip");
 
@@ -421,6 +421,7 @@ module.exports = function (RED: any) {
         // ControlLogix/CompactLogix: connected messaging
         node.plc = new Controller(!node.useMicro800);
         node.plc.timeout_sp = node.connTimeout;
+        guardReplyHandlers(node.plc, (text) => node.warn(text));
 
         if (node.useMicro800) {
           // Patch write_cip: Micro800 has no backplane, so skip UnconnectedSend wrapper.

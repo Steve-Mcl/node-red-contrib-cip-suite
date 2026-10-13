@@ -224,8 +224,8 @@ module.exports = function (RED) {
                 node.send((0, endpoint_dynamic_1.stampEndpoint)(outMsg, endpoint));
             }
             catch (err) {
-                node.status(utils_1.STATUS.error(err.message));
-                node.error(`Controller info read failed: ${err.message}`, triggerMsg || {});
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
+                node.error((0, utils_1.toCipError)(err, "Controller info read failed"), triggerMsg || {});
             }
             finally {
                 node._reading = false;
@@ -267,8 +267,8 @@ module.exports = function (RED) {
                 await readControllerInfo(msg, endpoint);
             }
             catch (err) {
-                node.status(utils_1.STATUS.error(err.message));
-                node.error(`Command "${cmd}" failed: ${err.message}`, msg);
+                node.status(utils_1.STATUS.error((0, utils_1.describeCipError)(err)));
+                node.error((0, utils_1.toCipError)(err, `Command "${cmd}" failed`), msg);
             }
         }
         // -- Polling --
@@ -323,7 +323,8 @@ module.exports = function (RED) {
             })
                 .catch((err) => {
                 node.status(utils_1.STATUS.disconnected((0, endpoint_dynamic_1.endpointLabel)(node)));
-                done ? done(err) : node.error(err.message, msg);
+                const error = (0, utils_1.toCipError)(err);
+                done ? done(error) : node.error(error, msg);
             });
         });
         // Register with endpoint

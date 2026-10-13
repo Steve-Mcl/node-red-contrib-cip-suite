@@ -11,7 +11,7 @@ import {
   ConnectionMetrics,
   NodeStatus,
 } from "./types";
-import { STATUS } from "./utils";
+import { STATUS, describeCipError, toCipError } from "./utils";
 import {
   DynOpts,
   MsgEndpoint,
@@ -263,8 +263,8 @@ module.exports = function (RED: any) {
 
         node.send(stampEndpoint(outMsg, endpoint));
       } catch (err: any) {
-        node.status(STATUS.error(err.message));
-        node.error(`Controller info read failed: ${err.message}`, triggerMsg || {});
+        node.status(STATUS.error(describeCipError(err)));
+        node.error(toCipError(err, "Controller info read failed"), triggerMsg || {});
       } finally {
         node._reading = false;
       }
@@ -303,8 +303,8 @@ module.exports = function (RED: any) {
         // After command, re-read status
         await readControllerInfo(msg, endpoint);
       } catch (err: any) {
-        node.status(STATUS.error(err.message));
-        node.error(`Command "${cmd}" failed: ${err.message}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
+        node.error(toCipError(err, `Command "${cmd}" failed`), msg);
       }
     }
 
@@ -367,9 +367,10 @@ module.exports = function (RED: any) {
           }
           readControllerInfo(msg, endpoint);
         })
-        .catch((err: Error) => {
+        .catch((err: any) => {
           node.status(STATUS.disconnected(endpointLabel(node)));
-          done ? done(err) : node.error(err.message, msg);
+          const error = toCipError(err);
+          done ? done(error) : node.error(error, msg);
         });
     });
 

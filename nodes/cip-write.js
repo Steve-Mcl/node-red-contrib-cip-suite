@@ -119,7 +119,7 @@ module.exports = function (RED) {
                     }
                     catch (err) {
                         // Fall through to software read-modify-write
-                        node.warn(`Atomic bit write failed, falling back to software RMW: ${err.message}`);
+                        node.warn(`Atomic bit write failed, falling back to software RMW: ${(0, utils_1.describeCipError)(err)}`);
                     }
                 }
                 // Software read-modify-write
@@ -235,7 +235,7 @@ module.exports = function (RED) {
                         success: false,
                         tagName: item.name,
                         value: item.value,
-                        error: err.message,
+                        ...(0, utils_1.cipErrorFields)(err),
                         timestamp: Date.now(),
                     });
                 }
@@ -314,10 +314,10 @@ module.exports = function (RED) {
                 msg.payload = {
                     success: false,
                     tagName: msg.tagName || node.tagName,
-                    error: err.message,
+                    ...(0, utils_1.cipErrorFields)(err),
                     timestamp: Date.now(),
                 };
-                node.error(`Write failed for ${msg.tagName || node.tagName}: ${err.message}`, msg);
+                node.error((0, utils_1.toCipError)(err, `Write failed for ${msg.tagName || node.tagName}`), msg);
                 node.send((0, endpoint_dynamic_1.stampEndpoint)(msg, endpoint));
             }
             finally {
