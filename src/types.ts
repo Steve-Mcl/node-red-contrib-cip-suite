@@ -320,8 +320,6 @@ export interface CipEndpointNode extends NodeRedNode {
   readModifyWriteTag(tagName: string, orMask: Buffer, andMask: Buffer): Promise<void>;
   readWallClock(): Promise<Date>;
   writeWallClock(date?: Date): Promise<void>;
-  changeMode(mode: "run" | "program" | "test"): Promise<void>;
-  resetFault(): Promise<void>;
   getController(): any;
 }
 

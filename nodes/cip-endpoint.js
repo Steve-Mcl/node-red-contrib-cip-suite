@@ -7,7 +7,6 @@
  * - Connection metrics tracking
  * - readModifyWriteTag for atomic bit manipulation
  * - readWallClock / writeWallClock for controller time
- * - changeMode / resetFault for controller management
  * - Multi-hop routing support
  * - Metrics admin endpoint
  * @module cip-endpoint
@@ -31,12 +30,6 @@ const CIP_CONNECTION_FAILURE = 0x01;
  * legitimately in progress.
  */
 const LIB_SESSION_TIMEOUT = 10000;
-/** Controller run mode constants for Set_Attribute_Single (class 0x01, attr 5) */
-const CONTROLLER_MODE = {
-    run: 0x0001,
-    program: 0x0000,
-    test: 0x0002,
-};
 module.exports = function (RED) {
     function CipEndpointNode(config) {
         RED.nodes.createNode(this, config);
@@ -761,67 +754,6 @@ module.exports = function (RED) {
                 return;
             }
             throw new Error("Wall clock write not supported on this controller");
-        };
-        /**
-         * Change the controller operating mode (Run / Program / Test).
-         * Sends CIP Set_Attribute_Single to Controller Object (class 0x01), instance 1, attribute 5.
-         */
-        node.changeMode = async function (mode) {
-            if (!node.connected || !node.plc) {
-                throw new Error("Not connected to PLC");
-            }
-            const modeValue = CONTROLLER_MODE[mode];
-            if (modeValue === undefined) {
-                throw new Error(`Invalid mode: ${mode}. Must be "run", "program", or "test"`);
-            }
-            // Build CIP Set_Attribute_Single request
-            // Path: class 0x01 (Identity/Controller), instance 1, attribute 5 (Mode)
-            const path = Buffer.from([0x20, types_1.CIPClass.IDENTITY, 0x24, 0x01, 0x30, 0x05]);
-            const data = Buffer.alloc(2);
-            data.writeUInt16LE(modeValue, 0);
-            const reqLen = 2 + path.length + data.length;
-            const reqBuf = Buffer.alloc(reqLen);
-            let offset = 0;
-            reqBuf.writeUInt8(types_1.CIPService.SET_ATTRIBUTE_SINGLE, offset++);
-            reqBuf.writeUInt8(path.length / 2, offset++);
-            path.copy(reqBuf, offset);
-            offset += path.length;
-            data.copy(reqBuf, offset);
-            await new Promise((resolve, reject) => {
-                node.plc.write_cip(reqBuf, false, 10, (err) => {
-                    if (err)
-                        reject(err);
-                    else
-                        resolve();
-                });
-            });
-        };
-        /**
-         * Reset controller fault.
-         * Sends CIP Reset service (0x05) to Controller Object (class 0x01), instance 1.
-         */
-        node.resetFault = async function () {
-            if (!node.connected || !node.plc) {
-                throw new Error("Not connected to PLC");
-            }
-            // Build CIP Reset request
-            const path = Buffer.from([0x20, types_1.CIPClass.IDENTITY, 0x24, 0x01]);
-            const reqBuf = Buffer.alloc(2 + path.length + 1);
-            let offset = 0;
-            reqBuf.writeUInt8(types_1.CIPService.RESET, offset++);
-            reqBuf.writeUInt8(path.length / 2, offset++);
-            path.copy(reqBuf, offset);
-            offset += path.length;
-            // Reset type 0 = non-power-cycle reset
-            reqBuf.writeUInt8(0x00, offset);
-            await new Promise((resolve, reject) => {
-                node.plc.write_cip(reqBuf, false, 10, (err) => {
-                    if (err)
-                        reject(err);
-                    else
-                        resolve();
-                });
-            });
         };
         /**
          * Get the underlying Controller instance.
