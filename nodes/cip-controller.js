@@ -232,38 +232,33 @@ module.exports = function (RED) {
             }
         }
         /**
-         * Handle runtime commands (run, program, test, reset).
+         * Handle msg.command. getProps and getStatus are plain reads.
+         *
+         * run/program/test and reset used to send requests that cannot do what they say: the
+         * mode change wrote the Identity object's Status word (attribute 5, get-only), and
+         * the "fault reset" was the Identity Reset service, which restarts the device. Logix
+         * has no documented CIP request for either, so they now fail with a clear reason.
          */
         async function handleCommand(command, msg, use) {
             const cmd = command.toLowerCase().trim();
             const endpoint = use || node.endpoint;
             try {
                 switch (cmd) {
+                    case "getprops":
+                    case "getstatus":
+                        break;
                     case "run":
                     case "program":
                     case "test":
-                        if (typeof endpoint.changeMode === "function") {
-                            await endpoint.changeMode(cmd);
-                            node.log(`Mode change to "${cmd}" requested`);
-                        }
-                        else {
-                            node.warn(`changeMode() not available on endpoint`);
-                        }
-                        break;
+                        throw new Error("Changing the controller mode over CIP is not supported. " +
+                            "Use the keyswitch or Studio 5000.");
                     case "reset":
-                        if (typeof endpoint.resetFault === "function") {
-                            await endpoint.resetFault();
-                            node.log("Fault reset requested");
-                        }
-                        else {
-                            node.warn(`resetFault() not available on endpoint`);
-                        }
-                        break;
+                        throw new Error("Fault reset over CIP is not supported. The only CIP reset is a device " +
+                            "restart, which this node does not send.");
                     default:
                         node.warn(`Unknown command: ${cmd}`);
                         return;
                 }
-                // After command, re-read status
                 await readControllerInfo(msg, endpoint);
             }
             catch (err) {
@@ -305,7 +300,7 @@ module.exports = function (RED) {
         });
         // -- Input handling --
         node.on("input", function (msg, send, done) {
-            // msg.command (run/program/test/reset) is this node's own vocabulary and is
+            // msg.command (getProps/getStatus) is this node's own vocabulary and is
             // unrelated to msg.action, which controls the connection.
             // A bare msg.endpoint names the endpoint for this message only and leaves the node
             // bound where it was, so ctx is captured before any await.
