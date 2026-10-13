@@ -321,24 +321,13 @@ module.exports = function (RED: any) {
       node.status({ fill: "yellow", shape: "dot", text: "sending..." });
 
       try {
-        const controller = endpoint.getController();
-        if (!controller) {
-          throw new Error("Controller not available");
-        }
-
         // Multiple Service Packet mode
         if (Array.isArray(msg.requests) && msg.requests.length > 0) {
           const mspPacket = buildMultipleServicePacket(msg.requests);
           const useConnected = msg.connected != null ? Boolean(msg.connected) : node.useConnected;
 
-          const { result: rawResponse, elapsed } = await withTiming(
-            () =>
-              new Promise<Buffer>((resolve, reject) => {
-                controller.write_cip(mspPacket, useConnected, 10, (err: any, data: Buffer) => {
-                  if (err) reject(err);
-                  else resolve(data);
-                });
-              })
+          const { result: rawResponse, elapsed } = await withTiming<Buffer>(() =>
+            endpoint.request(mspPacket, { connected: useConnected })
           );
 
           const responses = parseMultipleServiceResponse(rawResponse);
@@ -370,15 +359,9 @@ module.exports = function (RED: any) {
         const path = buildCIPPath(classId, instanceId, attributeId != null ? attributeId : undefined);
         const reqBuf = buildCIPRequest(service, path, data);
 
-        // Send via write_cip
-        const { result: rawResponse, elapsed } = await withTiming(
-          () =>
-            new Promise<Buffer>((resolve, reject) => {
-              controller.write_cip(reqBuf, useConnected, 10, (err: any, data: Buffer) => {
-                if (err) reject(err);
-                else resolve(data);
-              });
-            })
+        // Send and wait for the reply
+        const { result: rawResponse, elapsed } = await withTiming<Buffer>(() =>
+          endpoint.request(reqBuf, { connected: useConnected })
         );
 
         const parsed = parseCIPResponse(rawResponse);

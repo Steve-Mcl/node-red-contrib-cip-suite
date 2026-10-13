@@ -100,17 +100,7 @@ module.exports = function (RED) {
             return req;
         }
         async function sendRequest(req) {
-            const controller = node.endpoint.getController();
-            if (!controller)
-                throw new Error("Controller not available");
-            const raw = await new Promise((resolve, reject) => {
-                controller.write_cip(req, false, 10, (err, data) => {
-                    if (err)
-                        reject(err);
-                    else
-                        resolve(data);
-                });
-            });
+            const raw = await node.endpoint.request(req);
             if (!raw || raw.length < 4)
                 throw new Error("Empty response");
             const status = raw.readUInt8(2);

@@ -325,6 +325,7 @@ export interface CipEndpointNode extends NodeRedNode {
   readTag(tagName: string): Promise<{ value: any; type: string }>;
   writeTag(tagName: string, value: any, dataType?: number): Promise<void>;
   readModifyWriteTag(tagName: string, orMask: Buffer, andMask: Buffer): Promise<void>;
+  request(req: Buffer, opts?: { connected?: boolean }): Promise<Buffer>;
   readWallClock(): Promise<Date>;
   writeWallClock(date?: Date): Promise<void>;
   getController(): any;

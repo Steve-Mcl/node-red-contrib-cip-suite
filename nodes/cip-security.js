@@ -192,21 +192,13 @@ module.exports = function (RED) {
             node._busy = true;
             node.status({ fill: "yellow", shape: "dot", text: "requesting..." });
             try {
-                const controller = node.endpoint.getController();
                 const command = msg.command || msg.topic || "status";
                 switch (command) {
                     case "status":
                     case "getAttributes": {
                         // Read CIP Security Object attributes
                         const req = buildSecurityObjectRequest(0x01, 1); // GetAttributeAll, instance 1
-                        const raw = await new Promise((resolve, reject) => {
-                            controller.write_cip(req, false, 10, (err, data) => {
-                                if (err)
-                                    reject(err);
-                                else
-                                    resolve(data);
-                            });
-                        });
+                        const raw = await node.endpoint.request(req);
                         // Parse response
                         const service = raw.readUInt8(0) & 0x7f;
                         const status = raw.readUInt8(2);
@@ -290,14 +282,7 @@ module.exports = function (RED) {
                     case "getProfiles": {
                         // Read Security Profile Object
                         const req = buildSecurityObjectRequest(0x01, 1);
-                        const raw = await new Promise((resolve, reject) => {
-                            controller.write_cip(req, false, 10, (err, data) => {
-                                if (err)
-                                    reject(err);
-                                else
-                                    resolve(data);
-                            });
-                        });
+                        const raw = await node.endpoint.request(req);
                         const status = raw.readUInt8(2);
                         const extSize = raw.readUInt8(3);
                         const respData = raw.slice(4 + extSize * 2);

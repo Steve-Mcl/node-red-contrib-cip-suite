@@ -1214,6 +1214,21 @@ function handleFileObject(service, path, data) {
 /**
  * Handle Parameter Object (class 0x0F) requests.
  */
+/** A parameter value in the parameter's data type (REAL, UINT or a single byte). */
+function encodeParam(param, value) {
+  if (param.type === 0xca) {
+    const buf = Buffer.alloc(4);
+    buf.writeFloatLE(value, 0);
+    return buf;
+  }
+  if (param.type === 0xc7) {
+    const buf = Buffer.alloc(2);
+    buf.writeUInt16LE(value, 0);
+    return buf;
+  }
+  return Buffer.from([value & 0xff]);
+}
+
 function handleParameterObject(service, path, instanceId, data) {
   if (instanceId === 0) {
     // Class-level request
@@ -1241,89 +1256,43 @@ function handleParameterObject(service, path, instanceId, data) {
     // GetAttributeSingle — return all parameter descriptor data
     const attrId = extractAttributeId(path);
     let resp;
+    // Attribute numbers as in the CIP Parameter Object (class 0x0F).
+    const shortString = (text) => {
+      const buf = Buffer.alloc(1 + text.length);
+      buf.writeUInt8(text.length, 0);
+      buf.write(text, 1, "ascii");
+      return buf;
+    };
     switch (attrId) {
-      case 1: // VALUE
-        if (param.type === 0xCA) {
-          resp = Buffer.alloc(4);
-          resp.writeFloatLE(param.value, 0);
-        } else if (param.type === 0xC7) {
-          resp = Buffer.alloc(2);
-          resp.writeUInt16LE(param.value, 0);
-        } else {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(param.value, 0);
-        }
+      case 1: // Parameter Value
+        resp = encodeParam(param, param.value);
         break;
-      case 2: { // DESCRIPTOR (name as SHORT_STRING)
-        resp = Buffer.alloc(1 + param.name.length);
-        resp.writeUInt8(param.name.length, 0);
-        resp.write(param.name, 1, "ascii");
+      case 4: // Descriptor (bit 4 = read only)
+        resp = Buffer.alloc(2);
+        resp.writeUInt16LE(param.readOnly ? 0x0010 : 0, 0);
         break;
-      }
-      case 3: // DATA_TYPE
+      case 5: // Data Type
         resp = Buffer.alloc(2);
         resp.writeUInt16LE(param.type, 0);
         break;
-      case 4: // DATA_SIZE
-        if (param.type === 0xCA) {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(4, 0);
-        } else if (param.type === 0xC7) {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(2, 0);
-        } else {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(1, 0);
-        }
+      case 6: // Data Size
+        resp = Buffer.alloc(1);
+        resp.writeUInt8(encodeParam(param, 0).length, 0);
         break;
-      case 5: { // DESCRIPTOR_STRING (name)
-        resp = Buffer.alloc(1 + param.name.length);
-        resp.writeUInt8(param.name.length, 0);
-        resp.write(param.name, 1, "ascii");
+      case 7: // Parameter Name String
+        resp = shortString(param.name);
         break;
-      }
-      case 6: { // UNITS (SHORT_STRING)
-        const u = param.units || "";
-        resp = Buffer.alloc(1 + u.length);
-        resp.writeUInt8(u.length, 0);
-        if (u.length > 0) resp.write(u, 1, "ascii");
+      case 8: // Units String
+        resp = shortString(param.units || "");
         break;
-      }
-      case 7: // MIN_VALUE
-        if (param.type === 0xCA) {
-          resp = Buffer.alloc(4);
-          resp.writeFloatLE(param.min, 0);
-        } else if (param.type === 0xC7) {
-          resp = Buffer.alloc(2);
-          resp.writeUInt16LE(param.min, 0);
-        } else {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(param.min, 0);
-        }
+      case 10: // Minimum Value
+        resp = encodeParam(param, param.min);
         break;
-      case 8: // MAX_VALUE
-        if (param.type === 0xCA) {
-          resp = Buffer.alloc(4);
-          resp.writeFloatLE(param.max, 0);
-        } else if (param.type === 0xC7) {
-          resp = Buffer.alloc(2);
-          resp.writeUInt16LE(param.max, 0);
-        } else {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(param.max, 0);
-        }
+      case 11: // Maximum Value
+        resp = encodeParam(param, param.max);
         break;
-      case 9: // DEFAULT_VALUE
-        if (param.type === 0xCA) {
-          resp = Buffer.alloc(4);
-          resp.writeFloatLE(param.def, 0);
-        } else if (param.type === 0xC7) {
-          resp = Buffer.alloc(2);
-          resp.writeUInt16LE(param.def, 0);
-        } else {
-          resp = Buffer.alloc(1);
-          resp.writeUInt8(param.def, 0);
-        }
+      case 12: // Default Value
+        resp = encodeParam(param, param.def);
         break;
       default:
         console.log(`  PARAMETER unknown attr ${attrId}`);
