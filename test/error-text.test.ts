@@ -5,13 +5,16 @@
 import * as path from "path";
 
 function makeNode(file: string, config: Record<string, any>) {
+  const refusal = { generalStatusCode: 0x0e, extendedStatus: [] };
   const plc = {
     write_cip(_req: Buffer, _c: any, _t: any, cb: any) {
-      cb({ generalStatusCode: 0x0e, extendedStatus: [] });
+      cb(refusal);
     },
   };
   const endpoint = {
     connected: true,
+    // Both ways a node can send a raw request fail the same way.
+    request: () => Promise.reject(refusal),
     getController: () => plc,
     register: () => {},
     deregister: () => {},
