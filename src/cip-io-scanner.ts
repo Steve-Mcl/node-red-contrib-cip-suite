@@ -10,7 +10,7 @@
 import * as dgram from "dgram";
 import * as net from "net";
 import { CipIOScannerConfig, connectionErrorText } from "./types";
-import { STATUS } from "./utils";
+import { STATUS, describeCipError } from "./utils";
 
 const ENCAP_HEADER_LEN = 24;
 const EIP_PORT = 44818;
@@ -325,8 +325,8 @@ module.exports = function (RED: any) {
           `runIdleHeader=${node._runIdleHeader ? "on" : "off"} ` +
           `RPI=${node._rpi}ms`);
       } catch (err: any) {
-        node.error(`I/O connection failed: ${err.message}`);
-        node.status(STATUS.error(err.message));
+        node.error(`I/O connection failed: ${describeCipError(err)}`);
+        node.status(STATUS.error(describeCipError(err)));
         cleanup();
         // Retry after 5 seconds
         if (!node._closing) {
@@ -458,7 +458,7 @@ module.exports = function (RED: any) {
       });
 
       node._udpSocket.on("error", (err: Error) => {
-        node.error(`UDP error: ${err.message}`);
+        node.error(`UDP error: ${describeCipError(err)}`);
       });
 
       node._udpSocket.bind(node._udpPort, () => {

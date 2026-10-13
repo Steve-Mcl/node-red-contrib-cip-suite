@@ -77,6 +77,43 @@ export function parseProgramScope(tagName: string): ProgramScope {
   return { program: null, name: tagName };
 }
 
+/** A plain `{ ... }` object, not an array, Buffer, Date or null. */
+export function isPlainObject(v: any): v is Record<string, any> {
+  return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+}
+
+/**
+ * Lay `patch` over a UDT value read from the controller, so a payload naming only some
+ * members leaves the rest as they are. Nested UDTs merge the same way; an array in the
+ * patch replaces elements by index and keeps the array's length. A key the UDT does not
+ * have is an error, since the library would otherwise drop it without a word.
+ */
+export function mergeMembers(current: any, patch: any, path = ""): any {
+  if (Array.isArray(current) && Array.isArray(patch)) {
+    if (patch.length > current.length) {
+      throw new Error(`${path || "value"} has ${current.length} elements, got ${patch.length}`);
+    }
+    const out = current.slice();
+    patch.forEach((v, i) => {
+      out[i] = mergeMembers(current[i], v, `${path}[${i}]`);
+    });
+    return out;
+  }
+  if (isPlainObject(current) && isPlainObject(patch)) {
+    const out: Record<string, any> = { ...current };
+    for (const key of Object.keys(patch)) {
+      // Logix member names are case-insensitive.
+      const match = Object.keys(current).find((k) => k.toLowerCase() === key.toLowerCase());
+      if (match === undefined) {
+        throw new Error(`${path ? path + "." : ""}${key} is not a member of the UDT`);
+      }
+      out[match] = mergeMembers(current[match], patch[key], path ? `${path}.${match}` : match);
+    }
+    return out;
+  }
+  return patch;
+}
+
 export interface MemberInfo {
   arraySize: number | null;
   isStruct: boolean;
@@ -320,6 +357,65 @@ export function toCipError(err: any, prefix?: string): Error {
     if (err.extendedStatus !== undefined) (wrapped as any).extendedStatus = err.extendedStatus;
   }
   return wrapped;
+}
+
+/**
+ * The error fields of a failed result: readable text plus, for a CIP refusal, the raw
+ * status codes so a flow can branch on them instead of parsing text.
+ */
+export function cipErrorFields(err: any): {
+  error: string;
+  generalStatusCode?: number;
+  extendedStatus?: number[];
+} {
+  const fields: { error: string; generalStatusCode?: number; extendedStatus?: number[] } = {
+    error: describeCipError(err),
+  };
+  if (err && typeof err === "object" && typeof err.generalStatusCode === "number") {
+    fields.generalStatusCode = err.generalStatusCode;
+    fields.extendedStatus = Array.isArray(err.extendedStatus) ? err.extendedStatus : [];
+  }
+  return fields;
+}
+
+/**
+ * The st-ethernet-ip reply handlers that run inside the socket 'data' event. Anything
+ * they throw is uncaught and takes down the whole Node-RED process.
+ */
+export const LIB_REPLY_HANDLERS = ["_handleSendRRDataReceived", "_handleSendUnitDataReceived"];
+
+/**
+ * Wrap the library's reply handlers so a reply it cannot parse is logged instead of
+ * crashing Node-RED (SerafinTech/ST-node-ethernet-ip#84: a Multiple Service Packet reply
+ * with outer status 0 and a failed embedded reply dereferences null).
+ *
+ * Must run before connect(), which is where the library registers these handlers.
+ * When the failed reply was a Multiple Service Packet, its waiter is failed straight away
+ * with 0x1E (embedded service error) rather than left to time out.
+ */
+export function guardReplyHandlers(plc: any, warn: (text: string) => void): void {
+  for (const name of LIB_REPLY_HANDLERS) {
+    const original = plc[name];
+    if (typeof original !== "function") continue;
+    // SendUnitData carries a 2-byte connection sequence count ahead of the CIP reply.
+    const serviceOffset = name === "_handleSendUnitDataReceived" ? 2 : 0;
+    plc[name] = function (this: any, ...args: any[]) {
+      try {
+        return original.apply(this, args);
+      } catch (e: any) {
+        warn(`Ignored a CIP reply the library could not handle: ${describeCipError(e)}`);
+        let service: number | undefined;
+        try {
+          service = args[0][1].data.readUInt8(serviceOffset);
+        } catch {
+          // reply too short to name its service
+        }
+        if (service === 0x8a) {
+          this.emit("Multiple Service Packet", { generalStatusCode: 0x1e, extendedStatus: [] }, []);
+        }
+      }
+    };
+  }
 }
 
 /**

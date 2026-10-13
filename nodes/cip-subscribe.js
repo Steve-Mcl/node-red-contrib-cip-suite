@@ -133,7 +133,7 @@ module.exports = function (RED) {
                     });
                 }
                 catch (err) {
-                    node.warn(`Failed to add tag "${name}": ${err.message}`);
+                    node.warn(`Failed to add tag "${name}": ${(0, utils_1.describeCipError)(err)}`);
                 }
             }
             node._tagStates = states;
@@ -178,7 +178,7 @@ module.exports = function (RED) {
                 }
                 catch (err) {
                     if (current())
-                        node.log(`Scan error: ${err.message}`);
+                        node.log(`Scan error: ${(0, utils_1.describeCipError)(err)}`);
                 }
                 finally {
                     // A superseded cycle must not clear the flag out from under its replacement.

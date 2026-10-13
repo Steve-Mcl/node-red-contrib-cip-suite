@@ -15,7 +15,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { STATUS, withTiming, cipStatusText } from "./utils";
+import { STATUS, withTiming, cipStatusText, describeCipError, cipErrorFields } from "./utils";
 
 const FILE_OBJECT_CLASS = 0x37;
 
@@ -424,9 +424,9 @@ module.exports = function (RED: any) {
 
         node.send(msg);
       } catch (err: any) {
-        msg.payload = { success: false, error: err.message };
-        node.error(`File error: ${err.message}`, msg);
-        node.status(STATUS.error(err.message));
+        msg.payload = { success: false, ...cipErrorFields(err) };
+        node.error(`File error: ${describeCipError(err)}`, msg);
+        node.status(STATUS.error(describeCipError(err)));
         node.send(msg);
       } finally {
         node._busy = false;

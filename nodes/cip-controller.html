@@ -38,8 +38,8 @@
   <p>Any incoming message triggers a controller info read.</p>
   <dl class="message-properties">
     <dt>command <span class="property-type">string</span></dt>
-    <dd>Optional command: <code>"getProps"</code> to read controller properties,
-    <code>"getStatus"</code> to read status only, <code>"getFaults"</code> to read fault log.</dd>
+    <dd>Optional: <code>"getProps"</code> or <code>"getStatus"</code>. Both do the same read
+    as any other message.</dd>
   </dl>
   <h3>Outputs</h3>
   <dl class="message-properties">
@@ -47,18 +47,19 @@
     <dd>Controller name (project name).</dd>
     <dt>payload.serial <span class="property-type">string</span></dt>
     <dd>Controller serial number.</dd>
-    <dt>payload.firmware <span class="property-type">string</span></dt>
-    <dd>Firmware revision (major.minor).</dd>
-    <dt>payload.status <span class="property-type">number</span></dt>
-    <dd>Controller status word.</dd>
-    <dt>payload.runMode <span class="property-type">string</span></dt>
-    <dd>Current run mode: <code>"RUN"</code>, <code>"PROGRAM"</code>, <code>"REMOTE"</code>, or <code>"FAULTED"</code>.</dd>
-    <dt>payload.faulted <span class="property-type">boolean</span></dt>
-    <dd>Whether the controller is in a faulted state.</dd>
-    <dt>payload.vendor <span class="property-type">string</span></dt>
-    <dd>Vendor name.</dd>
-    <dt>payload.productType <span class="property-type">string</span></dt>
-    <dd>Product type description.</dd>
+    <dt>payload.firmware <span class="property-type">object</span></dt>
+    <dd>Firmware revision as <code>{ major, minor }</code>.</dd>
+    <dt>payload.vendorId, deviceType, productCode <span class="property-type">number</span></dt>
+    <dd>Identity numbers of the device.</dd>
+    <dt>payload.status <span class="property-type">object</span></dt>
+    <dd><code>runMode</code>, <code>faulted</code>, <code>majorFault</code>, <code>minorFault</code>
+    and <code>ioFault</code>, decoded from the controller status word.</dd>
+    <dt>payload.keyswitch <span class="property-type">string</span></dt>
+    <dd><code>"run"</code>, <code>"program"</code>, <code>"remote"</code> or <code>"unknown"</code>.</dd>
+    <dt>payload.tagCount <span class="property-type">number</span></dt>
+    <dd>Number of tags in the controller tag list.</dd>
+    <dt>payload.time <span class="property-type">Date</span></dt>
+    <dd>Controller wall clock, if the controller supports it.</dd>
     <dt>timestamp <span class="property-type">number</span></dt>
     <dd>Unix timestamp (ms) of the read.</dd>
   </dl>
@@ -66,12 +67,12 @@
   <p>Set a <b>Poll</b> interval (in milliseconds) for periodic status reads, or leave at 0 for
   trigger-only mode. This is useful for monitoring PLC health and run state.</p>
   <h3>Commands</h3>
-  <p>Send <code>msg.command</code> to request specific information:</p>
-  <ul>
-    <li><code>"getProps"</code> - Full controller properties (name, serial, firmware, vendor)</li>
-    <li><code>"getStatus"</code> - Status and run mode only (lighter request)</li>
-    <li><code>"getFaults"</code> - Read the controller fault log</li>
-  </ul>
+  <p><code>msg.command</code> accepts <code>"getProps"</code> and <code>"getStatus"</code>, which both
+  read the controller as above.</p>
+  <p>The node does not change the controller mode or reset faults. <code>"run"</code>,
+  <code>"program"</code>, <code>"test"</code> and <code>"reset"</code> fail with an error: Logix
+  has no documented CIP request for a mode change, and the only CIP reset restarts the
+  device. Use the keyswitch or Studio 5000.</p>
   <h3>Metrics</h3>
   <p>The node tracks connection uptime, request count, and error count in the node status.
   Use this node alongside dashboard nodes to build PLC health monitoring views.</p>
