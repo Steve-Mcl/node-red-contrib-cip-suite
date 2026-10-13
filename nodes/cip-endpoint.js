@@ -30,6 +30,11 @@ const CIP_CONNECTION_FAILURE = 0x01;
  * legitimately in progress.
  */
 const LIB_SESSION_TIMEOUT = 10000;
+/**
+ * st-ethernet-ip always dials 44818 and takes no port (SerafinTech/ST-node-ethernet-ip#85),
+ * so the configured port is kept but not used. Logs and info report the port actually used.
+ */
+const EIP_PORT = 44818;
 module.exports = function (RED) {
     function CipEndpointNode(config) {
         RED.nodes.createNode(this, config);
@@ -241,7 +246,7 @@ module.exports = function (RED) {
                 ...node.metrics,
                 uptime: node.metrics.connectTime && node.connected ? Date.now() - node.metrics.connectTime : 0,
                 address: node.address,
-                port: node.port,
+                port: EIP_PORT,
                 slot: node.slot,
                 useMicro800: node.useMicro800,
                 routingPath: node.routingPath || null,
@@ -335,7 +340,7 @@ module.exports = function (RED) {
                 return;
             node.metrics.errorCount++;
             node.metrics.reconnectCount++;
-            node.log(`Connection to ${node.address}:${node.port} lost${err ? ": " + (0, utils_1.describeCipError)(err) : ""}`);
+            node.log(`Connection to ${node.address}:${EIP_PORT} lost${err ? ": " + (0, utils_1.describeCipError)(err) : ""}`);
             node._settleConnect(err || new Error("Connection lost"));
             node._broadcast("cip:disconnected");
             if (!node._manualDisconnect)
@@ -383,9 +388,13 @@ module.exports = function (RED) {
                 // Retire the attempt first, so its own callbacks bow out via isCurrent() if the
                 // underlying promise ever does settle.
                 node._attemptId++;
-                node._onConnectFailed(new Error(`Timed out connecting to ${node.address}:${node.port} after ${budget}ms`), node.plc);
+                node._onConnectFailed(new Error(`Timed out connecting to ${node.address}:${EIP_PORT} after ${budget}ms`), node.plc);
             }, budget);
             const onSettled = () => clearTimeout(watchdog);
+            if (node.port !== EIP_PORT && node._portWarned !== node.port) {
+                node._portWarned = node.port;
+                node.warn(`Port ${node.port} is ignored: st-ethernet-ip always connects on ${EIP_PORT}`);
+            }
             try {
                 // Micro800: unconnected messaging (no ForwardOpen)
                 // ControlLogix/CompactLogix: connected messaging
@@ -438,7 +447,7 @@ module.exports = function (RED) {
                     _responseTimes = [];
                     node._watchSocket(thisPlc);
                     node._startKeepAlive();
-                    node.log(`Connected to ${node.address}:${node.port} slot ${node.slot}${node.useMicro800 ? " (Micro800)" : ""}${node.routingPath ? " routing=" + node.routingPath : ""}`);
+                    node.log(`Connected to ${node.address}:${EIP_PORT} slot ${node.slot}${node.useMicro800 ? " (Micro800)" : ""}${node.routingPath ? " routing=" + node.routingPath : ""}`);
                     node._settleConnect(null);
                     node._broadcast("cip:connected");
                 })
