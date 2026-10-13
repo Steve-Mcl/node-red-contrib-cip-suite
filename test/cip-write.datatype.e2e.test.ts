@@ -134,3 +134,41 @@ describe("cip-write Data Type", () => {
     expect(await readValue("MyDint")).toBe(99);
   });
 });
+
+describe("cip-write UDT", () => {
+  async function readStruct(name: string): Promise<any> {
+    const tag = plc.newTag(name, null, false);
+    await plc.readTag(tag);
+    return tag.value;
+  }
+
+  it("writes some members of a UDT and keeps the rest", async () => {
+    const before = await readStruct("FIS_Stn[1].Local");
+    const { write } = makeWriteNode({ tagName: "FIS_Stn[1].Local", dataType: "auto" });
+    const msg = await write({ payload: { FBCONTROL: [11, 12] } });
+    expect(msg.payload.success).toBe(true);
+
+    const after = await readStruct("FIS_Stn[1].Local");
+    expect(after.FBCONTROL).toEqual([11, 12]);
+    expect(after.FBRESULT).toEqual(before.FBRESULT);
+    expect(after.FBFACTUAL).toEqual(before.FBFACTUAL);
+  });
+
+  it("merges into a nested UDT through an array element", async () => {
+    const before = await readStruct("FIS_Stn[2].Local");
+    const { write } = makeWriteNode({ tagName: "FIS_Stn[2]", dataType: "auto" });
+    const msg = await write({ payload: { local: { FBRESULT: [5] } } });
+    expect(msg.payload.success).toBe(true);
+
+    const after = await readStruct("FIS_Stn[2].Local");
+    expect(after.FBRESULT).toEqual([5, before.FBRESULT[1]]);
+    expect(after.FBCONTROL).toEqual(before.FBCONTROL);
+  });
+
+  it("refuses a member the UDT does not have", async () => {
+    const { write } = makeWriteNode({ tagName: "FIS_Stn[3].Local", dataType: "auto" });
+    const msg = await write({ payload: { Nope: 1 } });
+    expect(msg.payload.success).toBe(false);
+    expect(msg.payload.error).toBe("Nope is not a member of the UDT");
+  });
+});

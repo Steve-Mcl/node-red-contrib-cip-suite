@@ -77,6 +77,43 @@ export function parseProgramScope(tagName: string): ProgramScope {
   return { program: null, name: tagName };
 }
 
+/** A plain `{ ... }` object, not an array, Buffer, Date or null. */
+export function isPlainObject(v: any): v is Record<string, any> {
+  return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+}
+
+/**
+ * Lay `patch` over a UDT value read from the controller, so a payload naming only some
+ * members leaves the rest as they are. Nested UDTs merge the same way; an array in the
+ * patch replaces elements by index and keeps the array's length. A key the UDT does not
+ * have is an error, since the library would otherwise drop it without a word.
+ */
+export function mergeMembers(current: any, patch: any, path = ""): any {
+  if (Array.isArray(current) && Array.isArray(patch)) {
+    if (patch.length > current.length) {
+      throw new Error(`${path || "value"} has ${current.length} elements, got ${patch.length}`);
+    }
+    const out = current.slice();
+    patch.forEach((v, i) => {
+      out[i] = mergeMembers(current[i], v, `${path}[${i}]`);
+    });
+    return out;
+  }
+  if (isPlainObject(current) && isPlainObject(patch)) {
+    const out: Record<string, any> = { ...current };
+    for (const key of Object.keys(patch)) {
+      // Logix member names are case-insensitive.
+      const match = Object.keys(current).find((k) => k.toLowerCase() === key.toLowerCase());
+      if (match === undefined) {
+        throw new Error(`${path ? path + "." : ""}${key} is not a member of the UDT`);
+      }
+      out[match] = mergeMembers(current[match], patch[key], path ? `${path}.${match}` : match);
+    }
+    return out;
+  }
+  return patch;
+}
+
 export interface MemberInfo {
   arraySize: number | null;
   isStruct: boolean;

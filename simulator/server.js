@@ -829,6 +829,24 @@ function handleWriteTag(service, tagName, dataBuf) {
     return cipResponse(service, 0x13); // not enough data
   }
   const type = dataBuf.readUInt16LE(0);
+
+  // UDT: type(2) + structure handle(2) + count(2) [+ byte offset(4) when fragmented]
+  // + raw bytes, copied straight into the tag's data at the resolved path.
+  if (type === STRUCT_TYPE) {
+    const resolved = resolveTagPath(tagName);
+    if (!resolved) return cipResponse(service, 0x05); // path destination unknown
+    if (!resolved.structure || dataBuf.readUInt16LE(2) !== resolved.structureHandle) {
+      return cipResponse(service, 0xff, undefined, 0x2107); // type mismatch
+    }
+    const fragOffset = service === 0x53 ? dataBuf.readUInt32LE(6) : 0;
+    const bytes = dataBuf.slice(service === 0x53 ? 10 : 6);
+    const room = resolved.elementCount * resolved.elementSize;
+    if (fragOffset + bytes.length > room) return cipResponse(service, 0x15); // too much data
+    bytes.copy(resolved.tag.data, resolved.byteOffset + fragOffset);
+    console.log(`  WRITE ${tagName} (UDT) ${bytes.length} bytes at +${fragOffset}`);
+    return cipResponse(service, 0);
+  }
+
   let value;
   switch (type) {
     case CIP_TYPES.BOOL:
