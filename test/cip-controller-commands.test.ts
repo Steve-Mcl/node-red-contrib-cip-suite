@@ -26,7 +26,7 @@ function identityAttrs(o: {
   };
   const serial = Buffer.alloc(4);
   serial.writeUInt32LE(o.serial);
-  return {
+  const attrs: Record<number, Buffer> = {
     1: u16(o.vendorId),
     2: u16(o.deviceType),
     3: u16(o.productCode),
@@ -34,8 +34,9 @@ function identityAttrs(o: {
     5: u16(o.status),
     6: serial,
     7: Buffer.concat([Buffer.from([o.name.length]), Buffer.from(o.name, "latin1")]),
-    ...(o.state !== undefined ? { 8: Buffer.from([o.state]) } : {}),
   };
+  if (o.state !== undefined) attrs[8] = Buffer.from([o.state]);
+  return attrs;
 }
 
 const MICRO850 = identityAttrs({
